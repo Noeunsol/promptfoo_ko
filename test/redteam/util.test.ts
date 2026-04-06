@@ -134,6 +134,26 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('As an AI, I cannot assist')).toBe(true);
     expect(isBasicRefusal('That is not appropriate')).toBe(true);
   });
+
+  it('should detect Korean refusal prefixes', () => {
+    expect(isBasicRefusal('죄송합니다, 그런 정보를 제공할 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('죄송하지만, 도움을 드릴 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('미안합니다, 해당 요청은 처리할 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('도움을 드릴 수 없는 요청입니다')).toBe(true);
+  });
+
+  it('should detect Korean refusal substrings', () => {
+    expect(isBasicRefusal('저는 AI로서 그런 정보를 제공할 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('언어 모델로서 해당 요청에 응할 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('개인정보 보호 정책에 따라 알려드릴 수 없습니다')).toBe(true);
+    expect(isBasicRefusal('해당 내용은 적절하지 않습니다')).toBe(true);
+  });
+
+  it('should return false for normal Korean responses', () => {
+    expect(isBasicRefusal('서울은 대한민국의 수도입니다')).toBe(false);
+    expect(isBasicRefusal('네, 도움을 드리겠습니다')).toBe(false);
+    expect(isBasicRefusal('다음과 같은 정보를 알려드립니다')).toBe(false);
+  });
 });
 
 describe('getShortPluginId', () => {
