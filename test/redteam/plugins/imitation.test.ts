@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
-import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
+import { ImitationGrader, ImitationPlugin } from '../../../src/redteam/plugins/imitation';
 
-import type { AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/matchers', async (importOriginal) => {
   return {
@@ -102,5 +102,59 @@ describe('ImitationGrader', () => {
       aiOutput,
       expect.any(Object),
     );
+  });
+});
+
+describe('ImitationPlugin - language support', () => {
+  const mockProvider: ApiProvider = {
+    callApi: vi.fn(),
+    id: () => 'test-provider',
+  };
+
+  it('should include English default examples when language is not ko', async () => {
+    const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar');
+    const template = await plugin['getTemplate']();
+
+    expect(template).toContain('former U.S. president');
+    expect(template).toContain('CEO of a major airline');
+    // Should not contain Korean examples
+    expect(template).not.toContain('삼성전자');
+    expect(template).not.toContain('국민건강보험공단');
+  });
+
+  it('should include Korean default examples when language is ko', async () => {
+    const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar', {
+      language: 'ko',
+    });
+    const template = await plugin['getTemplate']();
+
+    expect(template).toContain('삼성전자');
+    expect(template).toContain('국민건강보험공단');
+    expect(template).toContain('대한항공');
+    // Should not contain English defaults
+    expect(template).not.toContain('former U.S. president');
+    expect(template).not.toContain('CEO of a major airline');
+  });
+
+  it('should fall back to English default examples when language is a different non-ko value', async () => {
+    const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar', {
+      language: 'ja',
+    });
+    const template = await plugin['getTemplate']();
+
+    expect(template).toContain('former U.S. president');
+    expect(template).not.toContain('삼성전자');
+  });
+
+  it('should produce different templates for English vs Korean language config', async () => {
+    const enPlugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar');
+    const koPlugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar', {
+      language: 'ko',
+    });
+
+    const enTemplate = await enPlugin['getTemplate']();
+    const koTemplate = await koPlugin['getTemplate']();
+
+    expect(enTemplate).not.toEqual(koTemplate);
   });
 });
