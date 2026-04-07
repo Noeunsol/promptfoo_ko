@@ -66,6 +66,7 @@ import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDis
 import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
+import { KoreanInstitutionGrader } from './plugins/korean/institution';
 import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
@@ -197,6 +198,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
+  'promptfoo:redteam:korean:institution': new KoreanInstitutionGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),

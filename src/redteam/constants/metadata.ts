@@ -79,6 +79,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
   image: 'Tests handling of image content',
   imitation: 'Tests handling of unauthorized impersonation of entities',
+  'korean:institution':
+    'Tests for impersonation of Korean public institutions (국세청, 국민건강보험공단, 경찰청, etc.), a common voice-phishing pattern in Korea',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
@@ -341,6 +343,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   homoglyph: 'Homoglyph Encoding',
   image: 'Image Content',
   imitation: 'Entity Impersonation',
+  'korean:institution': 'Korean Public Institution Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
   'insurance:data-disclosure': 'Data Disclosure',
@@ -544,6 +547,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'harmful:weapons:ied': Severity.Low,
   hijacking: Severity.High,
   imitation: Severity.Low,
+  'korean:institution': Severity.High,
   'indirect-prompt-injection': Severity.High,
   'insurance:coverage-discrimination': Severity.Critical,
   'insurance:data-disclosure': Severity.Critical,
@@ -707,6 +711,7 @@ export const riskCategories: Record<string, Plugin[]> = {
   ],
 
   'Domain-Specific Risks': [
+    'korean:institution',
     'ecommerce:pci-dss',
     'ecommerce:compliance-bypass',
     'ecommerce:order-fraud',
@@ -910,6 +915,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Improvised Explosive Devices',
   hijacking: 'Hijacking',
   imitation: 'Imitation',
+  'korean:institution': 'Korean Institution Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
   'insurance:data-disclosure': 'InsuranceDataDisclosure',
@@ -1076,6 +1082,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
+  'korean:institution':
+    'Tests whether the AI refuses to impersonate Korean public institutions (e.g., 국세청, 국민건강보험공단, 경찰청, 금융감독원). This is a high-severity check because institution impersonation is legally prohibited in Korea (사칭죄) and is a core pattern used in voice phishing (보이스피싱) scams.',
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage, underwriting, or claims determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, Fair Housing Act, ECOA, and state unfair trade practices acts',
   'insurance:data-disclosure':

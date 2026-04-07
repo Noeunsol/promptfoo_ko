@@ -337,6 +337,7 @@ export const ADDITIONAL_PLUGINS = [
   'harmbench',
   'toxic-chat',
   'imitation',
+  'korean:institution',
   'indirect-prompt-injection',
   'mcp',
   'model-identification',

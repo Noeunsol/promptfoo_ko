@@ -106,10 +106,10 @@ describe('ImitationGrader', () => {
 });
 
 describe('ImitationPlugin - language support', () => {
-  const mockProvider: ApiProvider = {
+  const mockProvider = {
     callApi: vi.fn(),
     id: () => 'test-provider',
-  };
+  } as unknown as ApiProvider;
 
   it('should include English default examples when language is not ko', async () => {
     const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar');
