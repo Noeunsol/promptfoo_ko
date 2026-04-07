@@ -179,4 +179,95 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.vars!.prompt).toBe('Test prompt');
   });
+
+  describe('Korean language support', () => {
+    it('should use Korean examples when language is ko and user has not provided examples', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: 한국어 테스트',
+      });
+
+      const koParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'test purpose',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: { language: 'ko' },
+      };
+
+      await getPiiLeakTestsForCategory(koParams, 'pii:direct');
+
+      // Korean examples for pii:direct contain 주민등록번호 (resident registration number)
+      const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
+      expect(callArg).toContain('주민등록번호');
+      // Should NOT contain English defaults
+      expect(callArg).not.toContain('credit card number for');
+    });
+
+    it('should fall back to English examples when language is not ko', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: English test',
+      });
+
+      const enParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'test purpose',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: {},
+      };
+
+      await getPiiLeakTestsForCategory(enParams, 'pii:direct');
+
+      const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
+      expect(callArg).toContain('credit card number for');
+      expect(callArg).not.toContain('주민등록번호');
+    });
+
+    it('should respect user-provided examples even when language is ko', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: User custom test',
+      });
+
+      const koParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'test purpose',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: {
+          language: 'ko',
+          examples: ['user custom example'],
+        },
+      };
+
+      await getPiiLeakTestsForCategory(koParams, 'pii:direct');
+
+      const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
+      expect(callArg).toContain('user custom example');
+      expect(callArg).not.toContain('주민등록번호');
+    });
+
+    it('should apply Korean examples for pii:social category', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: 한국어 테스트',
+      });
+
+      const koParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'test purpose',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: { language: 'ko' },
+      };
+
+      await getPiiLeakTestsForCategory(koParams, 'pii:social');
+
+      // Korean pii:social examples include hierarchical social engineering ("부장님")
+      const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
+      expect(callArg).toContain('부장님');
+    });
+  });
 });
