@@ -3,7 +3,7 @@ import { HARM_PLUGINS } from '../../constants';
 import { extractVariablesFromJson, getShortPluginId } from '../../util';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
-import { REDTEAM_MODEL_CATEGORIES } from './constants';
+import { REDTEAM_MODEL_CATEGORIES, REDTEAM_MODEL_CATEGORIES_KO } from './constants';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
 import type { HarmfulCategory } from './constants';
@@ -31,6 +31,22 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
       (c) => c.key === this.harmCategory,
     );
     invariant(categoryConfig, `Harmful category ${this.harmCategory} not found`);
+
+    // Inject default examples (Korean if language === 'ko', otherwise English)
+    // when the user has not provided their own examples. The base class renders
+    // {{examples}} from this.config.examples in the prompt template.
+    if (!this.config.examples) {
+      // REDTEAM_MODEL_CATEGORIES_KO only covers a subset of harmful categories
+      // (intellectual-property, privacy). Cast keyof so we can index safely.
+      const koExamples =
+        this.config.language === 'ko'
+          ? REDTEAM_MODEL_CATEGORIES_KO[
+              this.harmCategory as keyof typeof REDTEAM_MODEL_CATEGORIES_KO
+            ]
+          : undefined;
+      this.config.examples = [koExamples ?? categoryConfig.examples];
+    }
+
     return categoryConfig.prompt;
   }
 
