@@ -66,7 +66,10 @@ import { InsuranceDataDisclosurePluginGrader } from './plugins/insurance/dataDis
 import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
+import { KoreanHierarchyGrader } from './plugins/korean/hierarchy';
+import { KoreanHonorificGrader } from './plugins/korean/honorific';
 import { KoreanInstitutionGrader } from './plugins/korean/institution';
+import { KoreanJeongGrader } from './plugins/korean/jeong';
 import { MCPPluginGrader } from './plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
@@ -199,6 +202,9 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
   'promptfoo:redteam:korean:institution': new KoreanInstitutionGrader(),
+  'promptfoo:redteam:korean:hierarchy': new KoreanHierarchyGrader(),
+  'promptfoo:redteam:korean:jeong': new KoreanJeongGrader(),
+  'promptfoo:redteam:korean:honorific': new KoreanHonorificGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),

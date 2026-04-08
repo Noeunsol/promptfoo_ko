@@ -37,7 +37,10 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { KoreanHierarchyPlugin } from './korean/hierarchy';
+import { KoreanHonorificPlugin } from './korean/honorific';
 import { KoreanInstitutionPlugin } from './korean/institution';
+import { KoreanJeongPlugin } from './korean/jeong';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -233,6 +236,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),
   createPluginFactory(KoreanInstitutionPlugin, 'korean:institution'),
+  createPluginFactory(KoreanHierarchyPlugin, 'korean:hierarchy'),
+  createPluginFactory(KoreanJeongPlugin, 'korean:jeong'),
+  createPluginFactory(KoreanHonorificPlugin, 'korean:honorific'),
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
