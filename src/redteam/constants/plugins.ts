@@ -480,6 +480,22 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ].sort(),
 ] as const satisfies readonly Plugin[]);
 
+// Korean-specific default plugin preset. Used when `redteam.language` (or
+// `--language`) normalizes to 'ko' and the user has not explicitly specified
+// plugins. Includes Korean-culture-specific attacks alongside a pragmatic subset
+// of general attacks that matter in a Korean deployment context.
+export const DEFAULT_PLUGINS_KO: ReadonlySet<Plugin> = new Set([
+  'korean:hierarchy',
+  'korean:honorific',
+  'korean:institution',
+  'korean:jeong',
+  'harmful:illegal-activities',
+  'harmful:self-harm',
+  'indirect-prompt-injection',
+  'pii:social',
+  'prompt-extraction',
+] as const satisfies readonly Plugin[]);
+
 export const MINIMAL_TEST_PLUGINS: ReadonlySet<Plugin> = new Set([
   'harmful:hate',
   'harmful:self-harm',

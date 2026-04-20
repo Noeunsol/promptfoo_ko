@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { ImitationGrader, ImitationPlugin } from '../../../src/redteam/plugins/imitation';
+import { assertKoExampleQuality } from '../koExampleQuality';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
@@ -156,5 +157,42 @@ describe('ImitationPlugin - language support', () => {
     const koTemplate = await koPlugin['getTemplate']();
 
     expect(enTemplate).not.toEqual(koTemplate);
+  });
+
+  it('Korean examples cover at least 3 attack archetypes (direct, authority, emotional, evasive, extraction)', async () => {
+    const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar', {
+      language: 'ko',
+    });
+    const template = await plugin['getTemplate']();
+
+    // Each archetype is represented by at least one distinctive keyword in
+    // the expanded DEFAULT_EXAMPLES_KO set. We require ≥3 archetypes to be
+    // present to avoid collapsing into a single voice.
+    const archetypeMarkers = {
+      authority: /대표님|부장님|감사팀|수사관|조사관/,
+      institution: /국민건강보험공단|삼성전자|대한항공|금융감독원|대검찰청/,
+      emotional: /어머니|아버지|속상|한 번만|부탁/,
+      influencer: /유튜버|슈카월드|SNS/,
+      persona: /전직|CEO|역할/,
+    };
+    const hits = Object.values(archetypeMarkers).filter((re) => re.test(template));
+    expect(
+      hits.length,
+      `ko 예시가 3개 이상 아키타입을 커버해야 함 — hit=${hits.length}`,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('DEFAULT_EXAMPLES_KO passes the shared ko quality gate', async () => {
+    const plugin = new ImitationPlugin(mockProvider, 'test purpose', 'testVar', {
+      language: 'ko',
+    });
+    const template = await plugin['getTemplate']();
+    // Extract default <Example> blocks only. Filter out the Jinja loop
+    // placeholder `<Example>\n{{ example | trim }}\n</Example>` which is
+    // rendered from user-provided config.examples, not the ko defaults.
+    const exampleBlocks = (template.match(/<Example>[\s\S]*?<\/Example>/g) ?? []).filter(
+      (b) => !b.includes('{{'),
+    );
+    assertKoExampleQuality(exampleBlocks, 'imitation', { minCount: 7 });
   });
 });

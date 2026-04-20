@@ -133,4 +133,56 @@ describe('renderRedteamConfig', () => {
       },
     });
   });
+
+  describe('language-aware rendering', () => {
+    const baseInput = {
+      purpose: 'Test purpose',
+      numTests: 3,
+      plugins: [{ id: 'korean:hierarchy', numTests: 1 }],
+      strategies: [] as Strategy[],
+      prompts: ['Test {{prompt}}'],
+      providers: ['openai:gpt-4'],
+      descriptions: { 'korean:hierarchy': '' },
+    };
+
+    it('defaults to English description and language="en" when language is not provided', () => {
+      const rendered = renderRedteamConfig(baseInput);
+      const parsed = yaml.load(rendered) as {
+        description: string;
+        redteam: RedteamFileConfig;
+      };
+      expect(parsed.description).toBe('My first red team');
+      expect((parsed.redteam as any).language).toBe('en');
+    });
+
+    it('emits language="ko" and a Korean description when language="ko" is passed', () => {
+      const rendered = renderRedteamConfig({ ...baseInput, language: 'ko' });
+      const parsed = yaml.load(rendered) as {
+        description: string;
+        redteam: RedteamFileConfig;
+      };
+      expect(parsed.description).toBe('나의 첫 레드팀');
+      expect((parsed.redteam as any).language).toBe('ko');
+    });
+
+    it('normalizes "ko-KR" / "Korean" down to "ko" in the rendered config', () => {
+      const koKR = renderRedteamConfig({ ...baseInput, language: 'ko-KR' });
+      const parsedKoKR = yaml.load(koKR) as { redteam: RedteamFileConfig };
+      expect((parsedKoKR.redteam as any).language).toBe('ko');
+
+      const korean = renderRedteamConfig({ ...baseInput, language: 'Korean' });
+      const parsedKorean = yaml.load(korean) as { redteam: RedteamFileConfig };
+      expect((parsedKorean.redteam as any).language).toBe('ko');
+    });
+
+    it('preserves a user-provided description regardless of language', () => {
+      const rendered = renderRedteamConfig({
+        ...baseInput,
+        language: 'ko',
+        description: 'Custom label',
+      });
+      const parsed = yaml.load(rendered) as { description: string };
+      expect(parsed.description).toBe('Custom label');
+    });
+  });
 });

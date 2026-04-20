@@ -44,6 +44,7 @@ import {
   type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  DEFAULT_PLUGINS_KO as REDTEAM_DEFAULT_PLUGINS_KO,
   REDTEAM_MODEL,
   type Severity,
 } from '../constants';
@@ -52,6 +53,7 @@ import { synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError } from '../types';
+import { normalizeRedteamLanguage } from '../util';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -326,6 +328,15 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
+  // Resolve language early so it can drive default plugin selection. The
+  // language value from the config file takes precedence over the CLI option,
+  // matching how other redteam fields are merged below.
+  const rawLanguage = redteamConfig?.language ?? options.language;
+  const normalizedLanguage = normalizeRedteamLanguage(rawLanguage);
+  logger.debug(
+    `[redteam] language resolved: raw=${JSON.stringify(rawLanguage)} normalized=${normalizedLanguage}`,
+  );
+
   let plugins: RedteamPluginObject[] = [];
 
   // If plugins are defined in the config file
@@ -360,8 +371,18 @@ export async function doGenerateRedteam(
       return pluginConfig;
     });
   } else {
-    // If no plugins specified, use default plugins
-    plugins = Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+    // If no plugins specified, use a language-aware default preset. When
+    // language=ko we run the Korean preset (korean:* plus a pragmatic subset
+    // of general attacks). For any other language we keep the historical
+    // English default preset to preserve backward compatibility.
+    const defaultPreset =
+      normalizedLanguage === 'ko' ? REDTEAM_DEFAULT_PLUGINS_KO : REDTEAM_DEFAULT_PLUGINS;
+    logger.debug(
+      `[redteam] language=${normalizedLanguage} → using ${
+        normalizedLanguage === 'ko' ? 'Korean' : 'English'
+      } default plugin preset (${defaultPreset.size} plugins)`,
+    );
+    plugins = Array.from(defaultPreset).map((plugin) => ({
       id: plugin,
       numTests: options.numTests ?? redteamConfig?.numTests,
     }));

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
+import { assertKoExampleQuality } from '../koExampleQuality';
 
 import type { PluginActionParams } from '../../../src/types/index';
 
@@ -268,6 +269,46 @@ describe('getPiiLeakTestsForCategory', () => {
       // Korean pii:social examples include hierarchical social engineering ("부장님")
       const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
       expect(callArg).toContain('부장님');
+    });
+
+    it('should apply expanded Korean examples for pii:api-db category', async () => {
+      mockProvider.callApi.mockResolvedValue({ output: 'Prompt: 한국어 테스트' });
+
+      const koParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'test purpose',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: { language: 'ko' },
+      };
+
+      await getPiiLeakTestsForCategory(koParams, 'pii:api-db');
+      const callArg = mockProvider.callApi.mock.calls[0]?.[0] as string;
+
+      // Expanded ko examples should include API/DB-specific Korean vocabulary.
+      expect(callArg).toContain('데이터베이스');
+      // Should not fall back to the English "customer database" phrase.
+      expect(callArg).not.toContain('customer database');
+      // Archetype diversity: authority and emotional markers present.
+      expect(callArg).toMatch(/감사팀|부장님|VIP/);
+    });
+
+    it('pii:api-db ko examples pass the shared quality gate (≥5 entries, hangul, no EN scaffold)', async () => {
+      mockProvider.callApi.mockResolvedValue({ output: 'x' });
+      const koParams: PluginActionParams = {
+        provider: mockProvider as any,
+        purpose: 'p',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config: { language: 'ko' },
+      };
+
+      await getPiiLeakTestsForCategory(koParams, 'pii:api-db');
+      const template = mockProvider.callApi.mock.calls[0]?.[0] as string;
+      const blocks = template.match(/<Example>[\s\S]*?<\/Example>/g) ?? [];
+      assertKoExampleQuality(blocks, 'pii:api-db', { minCount: 5 });
     });
   });
 });

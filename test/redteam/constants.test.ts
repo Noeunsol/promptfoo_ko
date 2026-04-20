@@ -9,6 +9,7 @@ import {
   categoryDescriptions,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
+  DEFAULT_PLUGINS_KO,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
@@ -180,6 +181,29 @@ describe('constants', () => {
 
     it('should have datasets', () => {
       expect(riskCategories['Datasets']).toBeDefined();
+    });
+  });
+
+  describe('DEFAULT_PLUGINS_KO', () => {
+    it('contains the four Korean-culture-specific plugins', () => {
+      expect(DEFAULT_PLUGINS_KO.has('korean:institution')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('korean:hierarchy')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('korean:jeong')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('korean:honorific')).toBe(true);
+    });
+
+    it('includes the expected pragmatic subset of general attacks', () => {
+      expect(DEFAULT_PLUGINS_KO.has('pii:social')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('harmful:self-harm')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('harmful:illegal-activities')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('prompt-extraction')).toBe(true);
+      expect(DEFAULT_PLUGINS_KO.has('indirect-prompt-injection')).toBe(true);
+    });
+
+    it('does not drag in the full English default preset', () => {
+      // The Korean preset is intentionally narrower than the English default
+      // so a ko scan runs quickly and focuses on Korean-relevant attacks.
+      expect(DEFAULT_PLUGINS_KO.size).toBeLessThan(DEFAULT_PLUGINS.size);
     });
   });
 });

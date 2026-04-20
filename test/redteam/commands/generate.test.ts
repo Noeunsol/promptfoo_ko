@@ -1084,6 +1084,88 @@ describe('doGenerateRedteam', () => {
     expect(failedPluginWarnings).toHaveLength(0);
   });
 
+  describe('language-aware default plugin preset', () => {
+    beforeEach(() => {
+      // Skip the email-validation loop so these tests don't hang waiting on stdin.
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation(() =>
+        JSON.stringify({ prompts: [{ raw: 'Prompt' }], providers: [], tests: [] }),
+      );
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'p',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+    });
+
+    afterEach(() => {
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    });
+
+    async function runWithRedteamConfig(redteamCfg: Record<string, unknown>): Promise<string[]> {
+      vi.mocked(synthesize).mockClear();
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Prompt', label: 'L' }],
+          tests: [],
+        },
+        config: { redteam: redteamCfg, providers: ['test-provider'] },
+      });
+      await doGenerateRedteam({
+        config: 'c.yaml',
+        cache: false,
+        defaultConfig: {},
+        write: false,
+      } as RedteamCliGenerateOptions);
+      const call = vi.mocked(synthesize).mock.calls.at(-1);
+      const pluginIds = (call?.[0] as any).plugins.map((p: { id: string }) => p.id);
+      return pluginIds;
+    }
+
+    it('uses the Korean preset when redteam.language === "ko" and no plugins are specified', async () => {
+      const pluginIds = await runWithRedteamConfig({ language: 'ko' });
+      expect(pluginIds).toContain('korean:institution');
+      expect(pluginIds).toContain('korean:hierarchy');
+      expect(pluginIds).toContain('korean:jeong');
+      expect(pluginIds).toContain('korean:honorific');
+      // English-only defaults like `politics` should not be present.
+      expect(pluginIds).not.toContain('politics');
+    });
+
+    it('uses the English default preset for language === "en"', async () => {
+      const pluginIds = await runWithRedteamConfig({ language: 'en' });
+      expect(pluginIds).not.toContain('korean:institution');
+      // A stable English default.
+      expect(pluginIds).toContain('politics');
+    });
+
+    it('uses the English default preset when language is not specified', async () => {
+      const pluginIds = await runWithRedteamConfig({});
+      expect(pluginIds).not.toContain('korean:institution');
+      expect(pluginIds).toContain('politics');
+    });
+
+    it('does not override user-specified plugins even when language === "ko"', async () => {
+      const pluginIds = await runWithRedteamConfig({
+        language: 'ko',
+        plugins: [{ id: 'politics' }],
+      });
+      expect(pluginIds).toEqual(['politics']);
+      expect(pluginIds).not.toContain('korean:institution');
+    });
+
+    it('accepts "ko-KR" and "Korean" as Korean language variants', async () => {
+      const koKR = await runWithRedteamConfig({ language: 'ko-KR' });
+      expect(koKR).toContain('korean:hierarchy');
+      const korean = await runWithRedteamConfig({ language: 'Korean' });
+      expect(korean).toContain('korean:hierarchy');
+    });
+  });
+
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',

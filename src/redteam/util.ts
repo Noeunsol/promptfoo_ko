@@ -7,7 +7,7 @@ import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
+import type { CallApiContextParams, PluginConfig, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -98,6 +98,57 @@ export function extractInputVarsFromPrompt(
  */
 export function normalizeApostrophes(str: string): string {
   return str.replace(/['′’']/g, "'");
+}
+
+/**
+ * Normalizes a raw language value (string, string[], or undefined) into the
+ * internal 'en' | 'ko' representation used by language-aware redteam behavior
+ * (default plugin preset, init template, grader rubric branching).
+ *
+ * Accepts common variants like 'ko', 'ko-KR', 'Korean', 'kor'. Any non-Korean
+ * value (including undefined / empty arrays) falls back to 'en'.
+ *
+ * Note: this is intentionally narrow. Multilingual generation (e.g. an array
+ * of target languages) still uses the original per-plugin language config;
+ * this helper only picks the default execution mode.
+ */
+export function normalizeRedteamLanguage(language: string | string[] | undefined): 'en' | 'ko' {
+  const first = Array.isArray(language) ? language[0] : language;
+  if (typeof first !== 'string') {
+    return 'en';
+  }
+  const lower = first.toLowerCase().trim();
+  if (lower === 'ko' || lower.startsWith('ko-') || lower === 'kor' || lower === 'korean') {
+    return 'ko';
+  }
+  return 'en';
+}
+
+/**
+ * Selects the language-appropriate content for a plugin. When the plugin's
+ * config.language normalizes to 'ko' and a Korean variant is provided, returns
+ * it; otherwise returns the English variant and emits a debug fallback log.
+ *
+ * Currently used for example sets (the dominant call-site), but the signature
+ * is content-agnostic: it can also be reused for instruction suffixes, rubric
+ * fragments, or any other localized plugin content without API change.
+ *
+ * TODO(logging): as plugins and languages grow, the debug log may become
+ * verbose. Consider gating behind an env flag or deduping per-plugin (e.g.
+ * a module-level Set of contexts already logged in this process).
+ */
+export function selectLocalizedContent<T>(
+  config: PluginConfig | undefined,
+  content: { en: T; ko?: T },
+  context: string,
+): T {
+  if (normalizeRedteamLanguage(config?.language) === 'ko') {
+    if (content.ko !== undefined) {
+      return content.ko;
+    }
+    logger.debug(`[redteam] plugin=${context} language=ko → fallback to en`);
+  }
+  return content.en;
 }
 
 const REFUSAL_PREFIXES = [

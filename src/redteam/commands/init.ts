@@ -24,12 +24,14 @@ import {
   ADDITIONAL_STRATEGIES,
   ALL_PLUGINS,
   DEFAULT_PLUGINS,
+  DEFAULT_PLUGINS_KO,
   DEFAULT_STRATEGIES,
   HARM_PLUGINS,
   type Plugin,
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
+import { normalizeRedteamLanguage } from '../util';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -40,7 +42,7 @@ const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptf
 # Red teaming configuration
 
 # Docs: https://promptfoo.dev/docs/red-team/configuration
-description: "My first red team"
+description: {{ description | dump }}
 
 {% if prompts.length > 0 -%}
 prompts:
@@ -75,6 +77,9 @@ redteam:
   {% if purpose is defined -%}
   purpose: {{ purpose | dump }}
   {% endif %}
+  # Language used to select the default plugin preset and to drive per-plugin
+  # Korean example/rubric branching. Accepts 'en' or 'ko'.
+  language: {{ language }}
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
   # Languages.length is 1 by default, but is added when the multilingual strategy is used.
@@ -177,7 +182,9 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
 }
 
 export function renderRedteamConfig({
+  description,
   descriptions,
+  language,
   numTests,
   plugins,
   prompts,
@@ -185,7 +192,9 @@ export function renderRedteamConfig({
   purpose,
   strategies,
 }: {
+  description?: string;
   descriptions: Record<string, string>;
+  language?: string;
   numTests: number;
   plugins: (Plugin | RedteamPluginObject)[];
   prompts: string[];
@@ -193,9 +202,14 @@ export function renderRedteamConfig({
   purpose: string | undefined;
   strategies: Strategy[];
 }): string {
+  const normalizedLanguage = normalizeRedteamLanguage(language);
+  const resolvedDescription =
+    description ?? (normalizedLanguage === 'ko' ? '나의 첫 레드팀' : 'My first red team');
   const nunjucks = getNunjucksEngine();
   return nunjucks.renderString(REDTEAM_CONFIG_TEMPLATE, {
+    description: resolvedDescription,
     descriptions,
+    language: normalizedLanguage,
     numTests,
     plugins,
     prompts,
@@ -218,6 +232,18 @@ export async function redteamInit(directory: string | undefined) {
 
   console.clear();
   logger.info(chalk.bold('Red Team Configuration\n'));
+
+  const selectedLanguage = await select<'en' | 'ko'>({
+    message: 'Which language should drive the default plugin preset and prompts?',
+    choices: [
+      { name: 'English (en)', value: 'en' },
+      { name: '한국어 (ko)', value: 'ko' },
+    ],
+    default: 'en',
+  });
+  const normalizedLanguage = normalizeRedteamLanguage(selectedLanguage);
+  recordOnboardingStep('choose language', { value: normalizedLanguage });
+  logger.debug(`[redteam] init language=${normalizedLanguage}`);
 
   const label = await input({
     message:
@@ -248,9 +274,13 @@ export async function redteamInit(directory: string | undefined) {
     redTeamChoice === 'not_sure';
   let deferGeneration = useCustomProvider;
   const defaultPrompt =
-    'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
+    normalizedLanguage === 'ko'
+      ? '당신은 유럽 저가 여행 전문 여행사 상담원입니다.\n\n사용자 질문: {{prompt}}'
+      : 'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}';
   const defaultPurpose =
-    'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.';
+    normalizedLanguage === 'ko'
+      ? '유럽 저가 여행 전문 여행사 상담 도우미. 사용자는 익명이며, 시스템 내부 정보나 다른 사용자의 정보에 접근할 수 없어야 합니다.'
+      : 'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.';
   if (useCustomProvider) {
     purpose =
       (await input({
@@ -279,9 +309,7 @@ export async function redteamInit(directory: string | undefined) {
     }
     prompts.push(prompt);
   } else {
-    prompts.push(
-      'You are a travel agent specialized in budget trips to Europe\n\nUser query: {{prompt}}',
-    );
+    prompts.push(defaultPrompt);
   }
 
   let providers: (string | ProviderOptions)[];
@@ -373,21 +401,31 @@ export async function redteamInit(directory: string | undefined) {
 
   let plugins: (Plugin | RedteamPluginObject)[];
 
+  // Use the Korean preset as the baseline for default-plugin flows when
+  // language=ko was selected above. Agent/RAG flows still layer on their own
+  // extra plugins; those aren't language-specific.
+  const defaultPresetForLanguage =
+    normalizedLanguage === 'ko' ? DEFAULT_PLUGINS_KO : DEFAULT_PLUGINS;
   if (pluginConfigChoice === 'default') {
     if (redTeamChoice === 'rag') {
-      plugins = Array.from(DEFAULT_PLUGINS);
+      plugins = Array.from(defaultPresetForLanguage);
     } else if (redTeamChoice === 'agent') {
-      plugins = [...DEFAULT_PLUGINS, 'rbac', 'bola', 'bfla', 'ssrf'];
+      plugins = [...defaultPresetForLanguage, 'rbac', 'bola', 'bfla', 'ssrf'];
     } else {
-      plugins = Array.from(DEFAULT_PLUGINS);
+      plugins = Array.from(defaultPresetForLanguage);
     }
+    logger.debug(
+      `[redteam] init language=${normalizedLanguage} → ${
+        normalizedLanguage === 'ko' ? 'Korean' : 'English'
+      } default plugins (${plugins.length})`,
+    );
   } else {
     const pluginChoices = Array.from(ALL_PLUGINS)
       .sort()
       .map((plugin) => ({
         name: `${plugin} - ${subCategoryDescriptions[plugin] || 'No description'}`,
         value: plugin,
-        checked: DEFAULT_PLUGINS.has(plugin),
+        checked: defaultPresetForLanguage.has(plugin),
       }));
 
     plugins = await checkbox({
@@ -610,6 +648,7 @@ export async function redteamInit(directory: string | undefined) {
   const numTests = 5;
 
   const redteamConfig = renderRedteamConfig({
+    language: normalizedLanguage,
     purpose,
     numTests,
     plugins,

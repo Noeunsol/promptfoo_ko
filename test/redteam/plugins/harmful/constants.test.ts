@@ -3,6 +3,7 @@ import {
   REDTEAM_MODEL_CATEGORIES,
   REDTEAM_MODEL_CATEGORIES_KO,
 } from '../../../../src/redteam/plugins/harmful/constants';
+import { assertKoExampleQuality } from '../../koExampleQuality';
 
 describe('REDTEAM_MODEL_CATEGORIES_KO', () => {
   it('should only define Korean variants for categories that exist in REDTEAM_MODEL_CATEGORIES', () => {
@@ -29,6 +30,13 @@ describe('REDTEAM_MODEL_CATEGORIES_KO', () => {
     const hangulRegex = /[\uAC00-\uD7AF]/;
     for (const [key, examples] of Object.entries(REDTEAM_MODEL_CATEGORIES_KO)) {
       expect(hangulRegex.test(examples!), `${key} should contain Hangul characters`).toBe(true);
+    }
+  });
+
+  it('every defined ko category passes the shared quality gate (≥5 Example blocks)', () => {
+    for (const [key, examples] of Object.entries(REDTEAM_MODEL_CATEGORIES_KO)) {
+      const blocks = examples!.match(/<Example>[\s\S]*?<\/Example>/g) ?? [];
+      assertKoExampleQuality(blocks, key, { minCount: 5 });
     }
   });
 });

@@ -11,7 +11,9 @@ import {
   isBasicRefusal,
   isEmptyResponse,
   normalizeApostrophes,
+  normalizeRedteamLanguage,
   removePrefix,
+  selectLocalizedContent,
 } from '../../src/redteam/util';
 
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
@@ -1054,5 +1056,83 @@ describe('extractInputVarsFromPrompt', () => {
 
     expect(result).toEqual({ username: 'admin', message: 'Hello' });
     expect(result).not.toHaveProperty('password');
+  });
+});
+
+describe('normalizeRedteamLanguage', () => {
+  it('returns "en" when language is undefined', () => {
+    expect(normalizeRedteamLanguage(undefined)).toBe('en');
+  });
+
+  it('returns "en" for non-Korean language codes', () => {
+    expect(normalizeRedteamLanguage('en')).toBe('en');
+    expect(normalizeRedteamLanguage('ja')).toBe('en');
+    expect(normalizeRedteamLanguage('fr')).toBe('en');
+  });
+
+  it('returns "ko" for Korean variants', () => {
+    expect(normalizeRedteamLanguage('ko')).toBe('ko');
+    expect(normalizeRedteamLanguage('KO')).toBe('ko');
+    expect(normalizeRedteamLanguage('ko-KR')).toBe('ko');
+    expect(normalizeRedteamLanguage('kor')).toBe('ko');
+    expect(normalizeRedteamLanguage('Korean')).toBe('ko');
+  });
+
+  it('uses the first entry when given an array', () => {
+    expect(normalizeRedteamLanguage(['ko', 'en'])).toBe('ko');
+    expect(normalizeRedteamLanguage(['en', 'ko'])).toBe('en');
+    expect(normalizeRedteamLanguage([])).toBe('en');
+  });
+});
+
+describe('selectLocalizedContent', () => {
+  const EN = 'English content';
+  const KO = '한국어 콘텐츠';
+
+  it('returns the Korean variant when language=ko and ko exists', () => {
+    expect(selectLocalizedContent({ language: 'ko' }, { en: EN, ko: KO }, 'plugin:test')).toBe(KO);
+  });
+
+  it('returns the English variant when language=en', () => {
+    expect(selectLocalizedContent({ language: 'en' }, { en: EN, ko: KO }, 'plugin:test')).toBe(EN);
+  });
+
+  it('returns the English variant when language is undefined', () => {
+    expect(selectLocalizedContent(undefined, { en: EN, ko: KO }, 'plugin:test')).toBe(EN);
+    expect(selectLocalizedContent({}, { en: EN, ko: KO }, 'plugin:test')).toBe(EN);
+  });
+
+  it('falls back to English and logs when language=ko but ko is missing', async () => {
+    const logger = (await import('../../src/logger')).default;
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+
+    try {
+      const result = selectLocalizedContent({ language: 'ko' }, { en: EN }, 'plugin:fallback-test');
+      expect(result).toBe(EN);
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('plugin=plugin:fallback-test'));
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('language=ko'));
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('accepts Korean language variants (ko-KR, Korean) via normalization', () => {
+    expect(selectLocalizedContent({ language: 'ko-KR' }, { en: EN, ko: KO }, 'plugin:test')).toBe(
+      KO,
+    );
+    expect(selectLocalizedContent({ language: 'Korean' }, { en: EN, ko: KO }, 'plugin:test')).toBe(
+      KO,
+    );
+  });
+
+  it('works with non-string content types (generic T)', () => {
+    const enArr = ['a', 'b'];
+    const koArr = ['가', '나'];
+    expect(selectLocalizedContent({ language: 'ko' }, { en: enArr, ko: koArr }, 'plugin:t')).toBe(
+      koArr,
+    );
+    expect(selectLocalizedContent({ language: 'en' }, { en: enArr, ko: koArr }, 'plugin:t')).toBe(
+      enArr,
+    );
   });
 });
