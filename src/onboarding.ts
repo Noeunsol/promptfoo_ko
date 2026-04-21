@@ -851,6 +851,277 @@ function buildProviderChoices(
   ];
 }
 
+/**
+ * Context passed to file-writing helpers. Holds the minimum needed to resolve
+ * target paths and decide whether an overwrite prompt should run.
+ */
+interface OnboardingContext {
+  interactive: boolean;
+  locale: InitLocale;
+  outDirectory: string;
+  outDirAbsolute: string;
+}
+
+/**
+ * Onboarding state collected from either the interactive flow or the
+ * non-interactive default builder. Downstream config rendering uses this
+ * regardless of how it was produced.
+ */
+interface OnboardingState {
+  action: string;
+  devLanguage: InitDevelopmentLanguage;
+  prompts: string[];
+  providers: (string | object)[];
+  /**
+   * Set when the interactive flow short-circuits to the redteam initializer;
+   * createDummyFiles uses this to return early without rendering a standard
+   * config.
+   */
+  redteamEarlyReturn?: {
+    numPrompts: number;
+    providerPrefixes: string[];
+    action: 'redteam';
+    language: 'not_applicable';
+    locale: InitLocale;
+    outDirectory: string;
+  };
+}
+
+/**
+ * Writes a file, optionally prompting the user to confirm an overwrite when
+ * the context is interactive and the target already exists. Previously an
+ * inner closure inside createDummyFiles; extracted to a free function so the
+ * sub-flows below can call it directly.
+ */
+async function writeOnboardingFile(
+  ctx: OnboardingContext,
+  { file, contents, required }: { file: string; contents: string; required: boolean },
+): Promise<void> {
+  const relativePath = path.join(ctx.outDirectory, file);
+  const absolutePath = path.join(ctx.outDirAbsolute, file);
+
+  if (ctx.interactive) {
+    const hasPermissionToWrite = await askForPermissionToOverwrite({
+      absolutePath,
+      relativePath,
+      required,
+      locale: ctx.locale,
+    });
+
+    if (!hasPermissionToWrite) {
+      if (required) {
+        logger.warn(`⚠️ Skipping required file ${relativePath} - configuration may be incomplete`);
+      } else {
+        logger.info(`⏩ Skipping ${relativePath}`);
+      }
+      return;
+    }
+  }
+
+  fs.writeFileSync(absolutePath, contents);
+  logger.info(`📝 Wrote ${relativePath}`);
+}
+
+/**
+ * Writes provider scaffolding scripts (provider.js / provider.py / provider.sh
+ * or provider.bat) for any file:// or exec: provider the user selected.
+ */
+async function writeProviderScripts(
+  ctx: OnboardingContext,
+  providerChoices: (string | ProviderOptions)[],
+): Promise<void> {
+  const hasJsProvider = providerChoices.some(
+    (choice) =>
+      typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+  );
+  if (hasJsProvider) {
+    await writeOnboardingFile(ctx, {
+      file: 'provider.js',
+      contents: JAVASCRIPT_PROVIDER,
+      required: true,
+    });
+  }
+
+  const hasExecProvider = providerChoices.some(
+    (choice) => typeof choice === 'string' && choice.startsWith('exec:'),
+  );
+  if (hasExecProvider) {
+    const isWindows = process.platform === 'win32';
+    await writeOnboardingFile(ctx, {
+      file: isWindows ? 'provider.bat' : 'provider.sh',
+      contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
+      required: true,
+    });
+  }
+
+  const hasPyProvider = providerChoices.some(
+    (choice) =>
+      typeof choice === 'string' &&
+      (choice.startsWith('python:') || (choice.startsWith('file://') && choice.endsWith('.py'))),
+  );
+  if (hasPyProvider) {
+    await writeOnboardingFile(ctx, {
+      file: 'provider.py',
+      contents: PYTHON_PROVIDER,
+      required: true,
+    });
+  }
+}
+
+/**
+ * Populates `prompts` with the action-specific default prompt(s). The compare
+ * flow may push a second prompt when provider count is low (see original
+ * logic).
+ */
+function pushPromptsForAction(
+  action: string,
+  templates: InitTemplateRegistryEntry,
+  providers: (string | object)[],
+  prompts: string[],
+): void {
+  if (action === 'compare') {
+    prompts.push(templates.prompts.compare[0]);
+    if (providers.length < 3) {
+      prompts.push(templates.prompts.compare[1]);
+    }
+  } else if (action === 'rag') {
+    prompts.push(templates.prompts.rag[0]);
+  } else if (action === 'agent') {
+    prompts.push(templates.prompts.agent[0]);
+  }
+}
+
+/**
+ * Writes context.js / context.py when the action is rag or agent. The dev
+ * language selection determines which file extension is generated.
+ */
+async function maybeWriteContextFile(
+  ctx: OnboardingContext,
+  action: string,
+  devLanguage: InitDevelopmentLanguage,
+): Promise<void> {
+  if (action !== 'rag' && action !== 'agent') {
+    return;
+  }
+  if (devLanguage === 'javascript') {
+    await writeOnboardingFile(ctx, {
+      file: 'context.js',
+      contents: JAVASCRIPT_VAR,
+      required: true,
+    });
+  } else {
+    await writeOnboardingFile(ctx, { file: 'context.py', contents: PYTHON_VAR, required: true });
+  }
+}
+
+/**
+ * Interactive onboarding flow. Prompts the user for action / dev language /
+ * provider, writes any provider scaffolding scripts and a context file when
+ * relevant, and returns the assembled state. If the user selects redteam,
+ * delegates to redteamInit and returns a state whose `redteamEarlyReturn`
+ * field tells the caller to short-circuit.
+ */
+async function runInteractiveOnboarding(
+  ctx: OnboardingContext,
+  templates: InitTemplateRegistryEntry,
+): Promise<OnboardingState> {
+  recordOnboardingStep('start');
+
+  logger.info(
+    chalk.bold('\nWelcome to Promptfoo!\n') +
+      chalk.gray("We'll set up a configuration file to get you started.\n"),
+  );
+
+  const action: string = await select({
+    message: templates.actionSelection.message,
+    choices: templates.actionSelection.choices,
+  });
+  recordOnboardingStep('choose app type', { value: action });
+
+  if (action === 'redteam') {
+    await redteamInit(ctx.outDirectory);
+    return {
+      action: 'redteam',
+      devLanguage: 'not_sure',
+      prompts: [],
+      providers: [],
+      redteamEarlyReturn: {
+        numPrompts: 0,
+        providerPrefixes: [],
+        action: 'redteam',
+        language: 'not_applicable',
+        locale: ctx.locale,
+        outDirectory: ctx.outDirectory,
+      },
+    };
+  }
+
+  let devLanguage: InitDevelopmentLanguage = 'not_sure';
+  if (action === 'rag' || action === 'agent') {
+    devLanguage = await select({
+      message: templates.developmentLanguageSelection.message,
+      choices: templates.developmentLanguageSelection.choices,
+    });
+    recordOnboardingStep('choose language', { value: devLanguage });
+  }
+
+  const providerChoice = await select({
+    message: templates.providerSelection.message,
+    choices: buildProviderChoices(action, templates.providerSelection),
+    loop: false,
+    pageSize: process.stdout.rows - 6,
+  });
+  const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
+    ? providerChoice
+    : [providerChoice];
+
+  recordOnboardingStep('choose providers', {
+    value: providerChoices.map((choice) =>
+      typeof choice === 'string' ? choice : JSON.stringify(choice),
+    ),
+  });
+
+  reportProviderAPIKeyWarnings(providerChoices, ctx.locale).forEach((warningText) =>
+    logger.warn(warningText),
+  );
+
+  const providers: (string | object)[] = [];
+  if (providerChoices.length > 0) {
+    if (providerChoices.length > 3) {
+      providers.push(
+        ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
+      );
+    } else {
+      providers.push(...providerChoices);
+    }
+    await writeProviderScripts(ctx, providerChoices);
+  } else {
+    providers.push('openai:gpt-4o-mini');
+    providers.push('openai:gpt-4.1-mini');
+  }
+
+  const prompts: string[] = [];
+  pushPromptsForAction(action, templates, providers, prompts);
+  await maybeWriteContextFile(ctx, action, devLanguage);
+
+  recordOnboardingStep('complete');
+
+  return { action, devLanguage, prompts, providers };
+}
+
+/**
+ * Non-interactive defaults used when --no-interactive is passed. Mirrors the
+ * values that the interactive flow would produce for the compare action.
+ */
+function buildNonInteractiveDefaults(templates: InitTemplateRegistryEntry): OnboardingState {
+  return {
+    action: 'compare',
+    devLanguage: 'not_sure',
+    prompts: [templates.prompts.compare[0], templates.prompts.compare[1]],
+    providers: ['openai:gpt-4o-mini', 'openai:gpt-4.1-mini'],
+  };
+}
+
 export async function createDummyFiles(
   directory: string | null,
   interactive: boolean = true,
@@ -861,230 +1132,52 @@ export async function createDummyFiles(
   const resolvedLocale = resolveInitLocale(locale);
   const templates = INIT_TEMPLATE_REGISTRY[resolvedLocale];
 
-  async function writeFile({
-    file,
-    contents,
-    required,
-  }: {
-    file: string;
-    contents: string;
-    required: boolean;
-  }) {
-    const relativePath = path.join(outDirectory, file);
-    const absolutePath = path.join(outDirAbsolute, file);
-
-    if (interactive) {
-      const hasPermissionToWrite = await askForPermissionToOverwrite({
-        absolutePath,
-        relativePath,
-        required,
-        locale: resolvedLocale,
-      });
-
-      if (!hasPermissionToWrite) {
-        if (required) {
-          logger.warn(`⚠️ Skipping required file ${relativePath} - configuration may be incomplete`);
-        } else {
-          logger.info(`⏩ Skipping ${relativePath}`);
-        }
-        return;
-      }
-    }
-
-    fs.writeFileSync(absolutePath, contents);
-    logger.info(`📝 Wrote ${relativePath}`);
-  }
-
-  const prompts: string[] = [];
-  const providers: (string | object)[] = [];
-  let action: string;
-  let devLanguage: InitDevelopmentLanguage;
-
   if (!fs.existsSync(outDirAbsolute)) {
     fs.mkdirSync(outDirAbsolute, { recursive: true });
   }
 
-  if (interactive) {
-    recordOnboardingStep('start');
+  const ctx: OnboardingContext = {
+    interactive,
+    locale: resolvedLocale,
+    outDirectory,
+    outDirAbsolute,
+  };
 
-    logger.info(
-      chalk.bold('\nWelcome to Promptfoo!\n') +
-        chalk.gray("We'll set up a configuration file to get you started.\n"),
-    );
+  const state = interactive
+    ? await runInteractiveOnboarding(ctx, templates)
+    : buildNonInteractiveDefaults(templates);
 
-    // Choose use case
-    action = await select({
-      message: templates.actionSelection.message,
-      choices: templates.actionSelection.choices,
-    });
-
-    recordOnboardingStep('choose app type', {
-      value: action,
-    });
-
-    if (action === 'redteam') {
-      await redteamInit(outDirectory);
-      return {
-        numPrompts: 0,
-        providerPrefixes: [],
-        action: 'redteam',
-        language: 'not_applicable',
-        locale: resolvedLocale,
-      };
-    }
-
-    devLanguage = 'not_sure';
-    if (action === 'rag' || action === 'agent') {
-      devLanguage = await select({
-        message: templates.developmentLanguageSelection.message,
-        choices: templates.developmentLanguageSelection.choices,
-      });
-
-      recordOnboardingStep('choose language', {
-        value: devLanguage,
-      });
-    }
-
-    const choices = buildProviderChoices(action, templates.providerSelection);
-
-    /**
-     * The potential of the object type here is given by the agent action conditional
-     * for openai as a value choice
-     */
-    const providerChoice = await select({
-      message: templates.providerSelection.message,
-      choices,
-      loop: false,
-      pageSize: process.stdout.rows - 6,
-    });
-    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
-      ? providerChoice
-      : [providerChoice];
-
-    recordOnboardingStep('choose providers', {
-      value: providerChoices.map((choice) =>
-        typeof choice === 'string' ? choice : JSON.stringify(choice),
-      ),
-    });
-
-    // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices, resolvedLocale).forEach((warningText) =>
-      logger.warn(warningText),
-    );
-
-    if (providerChoices.length > 0) {
-      if (providerChoices.length > 3) {
-        providers.push(
-          ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
-        );
-      } else {
-        providers.push(...providerChoices);
-      }
-
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.js',
-          contents: JAVASCRIPT_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
-        // Generate platform-appropriate executable provider script
-        const isWindows = process.platform === 'win32';
-        await writeFile({
-          file: isWindows ? 'provider.bat' : 'provider.sh',
-          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.py',
-          contents: PYTHON_PROVIDER,
-          required: true,
-        });
-      }
-    } else {
-      providers.push('openai:gpt-4o-mini');
-      providers.push('openai:gpt-4.1-mini');
-    }
-
-    if (action === 'compare') {
-      prompts.push(templates.prompts.compare[0]);
-      if (providers.length < 3) {
-        prompts.push(templates.prompts.compare[1]);
-      }
-    } else if (action === 'rag') {
-      prompts.push(templates.prompts.rag[0]);
-    } else if (action === 'agent') {
-      prompts.push(templates.prompts.agent[0]);
-    }
-
-    if (action === 'rag' || action === 'agent') {
-      if (devLanguage === 'javascript') {
-        await writeFile({
-          file: 'context.js',
-          contents: JAVASCRIPT_VAR,
-          required: true,
-        });
-      } else {
-        await writeFile({
-          file: 'context.py',
-          contents: PYTHON_VAR,
-          required: true,
-        });
-      }
-    }
-
-    recordOnboardingStep('complete');
-  } else {
-    action = 'compare';
-    devLanguage = 'not_sure';
-    prompts.push(templates.prompts.compare[0]);
-    prompts.push(templates.prompts.compare[1]);
-    providers.push('openai:gpt-4o-mini');
-    providers.push('openai:gpt-4.1-mini');
+  if (state.redteamEarlyReturn) {
+    return state.redteamEarlyReturn;
   }
 
   const nunjucks = getNunjucksEngine();
   const config = nunjucks.renderString(templates.configTemplate, {
-    prompts,
-    providers,
-    type: action,
-    devLanguage,
+    prompts: state.prompts,
+    providers: state.providers,
+    type: state.action,
+    devLanguage: state.devLanguage,
   });
 
-  await writeFile({
+  await writeOnboardingFile(ctx, {
     file: 'README.md',
-    contents: templates.readmeTemplate(action),
+    contents: templates.readmeTemplate(state.action),
     required: false,
   });
 
-  await writeFile({
+  await writeOnboardingFile(ctx, {
     file: 'promptfooconfig.yaml',
     contents: config,
     required: true,
   });
 
   return {
-    numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
-    action,
-    language: devLanguage,
+    numPrompts: state.prompts.length,
+    providerPrefixes: state.providers.map((p) =>
+      typeof p === 'string' ? p.split(':')[0] : 'unknown',
+    ),
+    action: state.action,
+    language: state.devLanguage,
     locale: resolvedLocale,
     outDirectory,
   };
