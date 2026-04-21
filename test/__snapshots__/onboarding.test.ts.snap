@@ -1,0 +1,80 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`createDummyFiles > should generate Korean template content when locale is ko 1`] = `
+"# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# 구성 작성 가이드: https://promptfoo.dev/docs/configuration/guide
+
+description: "나의 LLM 평가 프로젝트"
+
+prompts:
+  - "{{topic}}에 대한 트윗을 작성해줘"
+  - "{{topic}}에 대한 짧고 재밌는 트윗을 작성해줘"
+  
+
+providers:
+  - "openai:gpt-4o-mini"
+  - "openai:gpt-4.1-mini"
+  
+
+tests:
+  - vars:
+      topic: "K-POP의 세계적 영향력"
+
+  - vars:
+      topic: "제주도 2박 3일 여행 코스 추천"
+    assert:
+      # 단순 키워드 포함 확인
+      - type: icontains
+        value: "제주"
+
+      # 답변의 간결성 평가
+      - type: javascript
+        value: 1 / (output.length + 1)
+
+  - vars:
+      topic: "직장인 점심 메뉴 고르기"
+    assert:
+      # 유머나 창의성 등 주관적인 지표 평가
+      - type: llm-rubric
+        value: "직장인들이 공감할 만한 애환이 담겨 있으면서도 재치 있게 답변했는지 평가해줘"
+
+"
+`;
+
+exports[`createDummyFiles > should generate Korean template content when locale is ko 2`] = `
+"# Promptfoo 프롬프트 및 모델 비교 평가
+
+## 빠른 시작
+
+1. API 키를 설정하세요 (클라우드 제공자 사용 시):
+
+\`\`\`bash
+export OPENAI_API_KEY=sk-...
+# 또는 다른 제공자:
+# export ANTHROPIC_API_KEY=sk-ant-...
+# export GOOGLE_API_KEY=...
+\`\`\`
+
+2. \`promptfooconfig.yaml\`에서 프롬프트, 제공자, 테스트 케이스를 수정하세요.
+
+3. 평가를 실행하세요:
+
+\`\`\`bash
+promptfoo eval
+\`\`\`
+
+4. 브라우저에서 결과를 확인하세요:
+
+\`\`\`bash
+promptfoo view
+\`\`\`
+
+## 더 알아보기
+
+- 구성 가이드: https://promptfoo.dev/docs/configuration/guide
+- 전체 제공자: https://promptfoo.dev/docs/providers
+- Assertions & metrics: https://promptfoo.dev/docs/configuration/expected-outputs
+- 예제: https://github.com/promptfoo/promptfoo/tree/main/examples
+"
+`;

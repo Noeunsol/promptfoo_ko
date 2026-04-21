@@ -2,7 +2,11 @@ import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
+import {
+  createDummyFiles,
+  reportProviderAPIKeyWarnings,
+  resolveInitLocale,
+} from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types/index';
 
 // Create hoisted mocks for inquirer modules
@@ -121,6 +125,14 @@ describe('reportProviderAPIKeyWarnings', () => {
       ]),
     );
   });
+  it('should produce Korean warnings when locale is ko', () => {
+    expect(reportProviderAPIKeyWarnings([openaiID], 'ko')).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('OPENAI_API_KEY 환경 변수가 설정되어 있지 않습니다'),
+        expect.stringContaining('다음과 같이 환경 변수를 설정하세요'),
+      ]),
+    );
+  });
 });
 
 describe('createDummyFiles', () => {
@@ -165,8 +177,32 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5-mini');
-    expect(config.providers).toContain('openai:gpt-5');
+    expect(config.providers).toContain('openai:gpt-4o-mini');
+    expect(config.providers).toContain('openai:gpt-4.1-mini');
+  });
+
+  it('should generate Korean template content when locale is ko', async () => {
+    await createDummyFiles(tempDir, false, 'ko');
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const readmeCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('README.md'),
+    );
+
+    const configContent = configCall?.[1] as string;
+    const readmeContent = readmeCall?.[1] as string;
+
+    expect(configContent).toContain('# 구성 작성 가이드');
+    expect(configContent).toContain('{{topic}}에 대한 트윗을 작성해줘');
+    expect(configContent).toContain('"openai:gpt-4o-mini"');
+    expect(configContent).toContain('"openai:gpt-4.1-mini"');
+    expect(configContent).toMatchSnapshot();
+
+    expect(readmeContent).toContain('## 빠른 시작');
+    expect(readmeContent).toContain('프롬프트 및 모델 비교 평가');
+    expect(readmeContent).toMatchSnapshot();
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {
@@ -220,6 +256,93 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('should show Korean action selection choices when locale is ko', async () => {
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
+
+    await createDummyFiles(tempDir, true, 'ko');
+
+    expect(mockSelect).toHaveBeenCalled();
+    const firstSelectArgs = mockSelect.mock.calls[0]?.[0] as {
+      message: string;
+      choices: Array<{ name: string; value: string; description: string }>;
+    };
+    expect(firstSelectArgs.message).toBe('무엇을 해보고 싶나요?');
+    expect(firstSelectArgs.choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: '아직 잘 모르겠어요',
+          value: 'compare',
+        }),
+        expect.objectContaining({
+          name: '레드팀 보안 평가 실행',
+          value: 'redteam',
+        }),
+      ]),
+    );
+  });
+
+  it('should show Korean development language choices when locale is ko and action is rag', async () => {
+    mockSelect
+      .mockResolvedValueOnce('rag')
+      .mockResolvedValueOnce('not_sure')
+      .mockResolvedValueOnce('openai:gpt-4o');
+
+    await createDummyFiles(tempDir, true, 'ko');
+
+    const secondSelectArgs = mockSelect.mock.calls[1]?.[0] as {
+      message: string;
+      choices: Array<{ name: string; value: string }>;
+    };
+
+    expect(secondSelectArgs.message).toBe('어떤 프로그래밍 언어로 앱을 개발하고 있나요?');
+    expect(secondSelectArgs.choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: '아직 잘 모르겠어요',
+          value: 'not_sure',
+        }),
+        expect.objectContaining({
+          name: 'JavaScript',
+          value: 'javascript',
+        }),
+      ]),
+    );
+  });
+
+  it('should show Korean provider choices when locale is ko', async () => {
+    mockSelect
+      .mockResolvedValueOnce('rag')
+      .mockResolvedValueOnce('python')
+      .mockResolvedValueOnce('openai:gpt-4o');
+
+    await createDummyFiles(tempDir, true, 'ko');
+
+    const thirdSelectArgs = mockSelect.mock.calls[2]?.[0] as {
+      message: string;
+      choices: Array<{ name: string; value: unknown; description?: string }>;
+    };
+
+    expect(thirdSelectArgs.message).toBe(
+      '어떤 모델 제공자(Provider)를 사용하여 테스트를 시작하시겠습니까?',
+    );
+    expect(thirdSelectArgs.choices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: '나중에 선택하기 (기본 설정 사용)',
+          description: '설정 파일에서 나중에 직접 모델을 추가할 수 있습니다.',
+        }),
+        expect.objectContaining({
+          name: '로컬 Python 스크립트',
+          description: '직접 작성한 Python 코드를 모델 인터페이스로 사용합니다.',
+        }),
+        expect.objectContaining({
+          name: 'HTTP 엔드포인트',
+          description: '커스텀 API 서버나 특정 URL로 요청을 보냅니다.',
+        }),
+      ]),
+    );
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) =>
       path.toString().includes('promptfooconfig.yaml'),
@@ -236,5 +359,34 @@ describe('createDummyFiles', () => {
         message: expect.stringContaining('already exist'),
       }),
     );
+  });
+
+  it('should show Korean overwrite confirmation when locale is ko', async () => {
+    mockFs.existsSync.mockImplementation((path: string) =>
+      path.toString().includes('promptfooconfig.yaml'),
+    );
+
+    mockConfirm.mockResolvedValueOnce(true);
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
+
+    await createDummyFiles(tempDir, true, 'ko');
+
+    expect(mockConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('파일이 이미 존재합니다. 덮어쓸까요?'),
+      }),
+    );
+  });
+});
+
+describe('resolveInitLocale', () => {
+  it('should normalize locale values to en or ko', () => {
+    expect(resolveInitLocale(undefined)).toBe('en');
+    expect(resolveInitLocale('en')).toBe('en');
+    expect(resolveInitLocale('ko')).toBe('ko');
+    expect(resolveInitLocale('KO')).toBe('ko');
+    expect(resolveInitLocale('ko-KR')).toBe('ko');
+    expect(resolveInitLocale('korean')).toBe('ko');
+    expect(resolveInitLocale('fr')).toBe('en');
   });
 });

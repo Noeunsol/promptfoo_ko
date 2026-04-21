@@ -4,15 +4,15 @@ import path from 'path';
 import confirm from '@inquirer/confirm';
 import select from '@inquirer/select';
 import chalk from 'chalk';
+import { type Command, Option } from 'commander';
 import dedent from 'dedent';
 import { VERSION } from '../constants';
 import logger from '../logger';
-import { initializeProject } from '../onboarding';
+import { initializeProject, resolveInitLocale } from '../onboarding';
 import telemetry from '../telemetry';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './exampleAliases';
-import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 const DEFAULT_EXAMPLE_REFS = [VERSION, 'main'];
@@ -382,6 +382,7 @@ export async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
+  locale: string | undefined;
 }
 
 export function initCommand(program: Command) {
@@ -390,6 +391,11 @@ export function initCommand(program: Command) {
     .description('Set up a new promptfoo project with prompts, providers, and test cases')
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
+    .addOption(
+      new Option('--locale <locale>', 'Locale for generated templates (en|ko). Defaults to en')
+        .choices(['en', 'ko'])
+        .default('en'),
+    )
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
@@ -411,7 +417,11 @@ export function initCommand(program: Command) {
           name: 'init',
         });
       } else {
-        const details = await initializeProject(directory, cmdObj.interactive);
+        const details = await initializeProject(
+          directory,
+          cmdObj.interactive,
+          resolveInitLocale(cmdObj.locale),
+        );
         telemetry.record('command_used', {
           ...details,
           name: 'init',

@@ -1,36 +1,72 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-# Red teaming configuration
+# 구성 작성 가이드: https://promptfoo.dev/docs/configuration/guide
 
-# Docs: https://promptfoo.dev/docs/red-team/configuration
-description: '한국어 Red Team 테스트'
+description: '나의 LLM 평가 프로젝트'
 
 prompts:
-  - "당신은 친절하고 간결한 어시스턴트입니다.\n\n사용자 질문: {{prompt}}\n\n\n"
-  # You can also reference external prompts, e.g.
-  # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
+  - '당신은 헬프데스크 전문가입니다. 다음 티켓 내용을 분석하고 해결 방안을 제시해줘: {{inquiry}}'
 
-targets:
-  # Red team targets. To talk directly to your application, use a custom provider.
-  # See https://promptfoo.dev/docs/red-team/configuration/#providers
-  - id: openai:gpt-4o-mini
-    label: korean-chatbot
-    config:
+providers:
+  - {
+      'id': 'openai:gpt-4o-mini',
+      'config':
+        {
+          'tools':
+            [
+              {
+                'type': 'function',
+                'function':
+                  {
+                    'name': 'get_current_weather',
+                    'description': 'Get the current weather in a given location',
+                    'parameters':
+                      {
+                        'type': 'object',
+                        'properties':
+                          {
+                            'location':
+                              {
+                                'type': 'string',
+                                'description': 'The city and state, e.g. San Francisco, CA',
+                              },
+                          },
+                        'required': ['location'],
+                      },
+                  },
+              },
+            ],
+        },
+    }
 
-# Other redteam settings
-redteam:
-  language: ko
+tests:
+  - vars:
+      inquiry: '배송이 너무 늦어지는데, 현재 위치 확인이 가능한가요?'
+      context: file://context.py
 
-  # Default number of inputs to generate for each plugin.
-  # The total number of tests will be (numTests * plugins.length * (1 + strategies.length) * languages.length)
-  # Languages.length is 1 by default, but is added when the multilingual strategy is used.
-  numTests: 2
+  - vars:
+      inquiry: '상품이 파손되어 배송되었습니다. 환불 절차를 알려주세요.'
+      # RAG/벡터 스토어 연결 가이드: https://promptfoo.dev/docs/guides/evaluate-rag/#using-dynamic-context
+      context: file://context.py
+    assert:
+      # Assertion 상세 문법: https://promptfoo.dev/docs/configuration/expected-outputs
 
-  plugins:
-    - harmful:privacy
-    - pii:direct
-    - hijacking
+      # 핵심 키워드가 포함되어 있는지 확인 (icontains는 조사가 붙어도 감지 가능)
+      - type: icontains
+        value: '반품'
 
-  strategies:
-    - basic
+      # 한국어 특성을 고려한 답변 길이 제한 (너무 길지 않게 설정)
+      - type: javascript
+        value: 1 / (output.length + 1)
+
+  - vars:
+      inquiry: '아이디를 잊어버렸어요. 계정 복구를 도와주세요.'
+      context: |
+        여기에 지식 베이스(KB)나 문서 내용을 직접 입력할 수 있습니다.
+        사용자 이름: 홍길동
+        가입 이메일: support@example.com
+    assert:
+      # LLM 기반 채점 (모델이 문맥과 톤앤매너를 이해하여 평가)
+      # 한국어 맥락 이해도가 높은 GPT-4o나 Claude 3.5 모델 사용을 권장합니다.
+      - type: llm-rubric
+        value: '답변이 정중한 격식체(하십시오체나 해요체)를 사용하고 있으며, 고객의 문제를 해결하려는 의지가 느껴지는지 확인해줘'
