@@ -382,6 +382,7 @@ export async function handleExampleDownload(
 interface InitCommandOptions {
   interactive: boolean;
   example: string | boolean | undefined;
+  locale: string | undefined;
 }
 
 export function initCommand(program: Command) {
@@ -389,6 +390,7 @@ export function initCommand(program: Command) {
     .command('init [directory]')
     .description('Set up a new promptfoo project with prompts, providers, and test cases')
     .option('--no-interactive', 'Do not run in interactive mode')
+    .option('--locale <locale>', 'Locale for generated template content (e.g. en, ko)')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       if (directory === 'redteam' && cmdObj.interactive) {
@@ -411,7 +413,7 @@ export function initCommand(program: Command) {
           name: 'init',
         });
       } else {
-        const details = await initializeProject(directory, cmdObj.interactive);
+        const details = await initializeProject(directory, cmdObj.interactive, cmdObj.locale);
         telemetry.record('command_used', {
           ...details,
           name: 'init',

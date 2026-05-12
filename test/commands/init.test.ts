@@ -575,7 +575,7 @@ describe('init command', () => {
       expect(initCmd?.description()).toBe(
         'Set up a new promptfoo project with prompts, providers, and test cases',
       );
-      expect(initCmd?.options).toHaveLength(2);
+      expect(initCmd?.options).toHaveLength(3);
     });
   });
 });
