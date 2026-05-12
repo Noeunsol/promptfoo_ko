@@ -536,25 +536,48 @@ export function renderRedteamConfig({
   });
 }
 
-export async function redteamInit(
-  directory: string | undefined,
-  locale: string | undefined = undefined,
-) {
-  telemetry.record('redteam init', { phase: 'started' });
-  recordOnboardingStep('start');
-  const resolvedLocale = resolveRedteamInitLocale(locale);
-  const template = REDTEAM_INIT_TEMPLATES[resolvedLocale];
+type RedteamChoice = 'not_sure' | 'http_endpoint' | 'prompt_model_chatbot' | 'rag' | 'agent';
 
+interface ProjectPaths {
+  projectDir: string;
+  configPath: string;
+}
+
+interface PromptCollectionResult {
+  prompts: string[];
+  purpose: string | undefined;
+  useCustomProvider: boolean;
+  deferGeneration: boolean;
+}
+
+interface ProviderSelectionResult {
+  providers: (string | ProviderOptions)[];
+  writeChatPy: boolean;
+}
+
+function getUseCustomProvider(redTeamChoice: RedteamChoice): boolean {
+  return (
+    redTeamChoice === 'rag' ||
+    redTeamChoice === 'agent' ||
+    redTeamChoice === 'http_endpoint' ||
+    redTeamChoice === 'not_sure'
+  );
+}
+
+async function prepareProjectPaths(directory: string | undefined): Promise<ProjectPaths> {
   const projectDir = directory || '.';
   if (projectDir !== '.') {
     await fs.mkdir(projectDir, { recursive: true });
   }
+  return {
+    projectDir,
+    configPath: path.join(projectDir, 'promptfooconfig.yaml'),
+  };
+}
 
-  const configPath = path.join(projectDir, 'promptfooconfig.yaml');
-
-  console.clear();
-  logger.info(chalk.bold(template.title));
-
+async function promptTargetMetadata(
+  template: RedteamInitTemplate,
+): Promise<{ label: string; redTeamChoice: RedteamChoice }> {
   const label = await input({
     message: template.targetNameMessage,
   });
@@ -571,27 +594,30 @@ export async function redteamInit(
     pageSize: process.stdout.rows - 6,
   });
 
-  recordOnboardingStep('choose app type', { value: redTeamChoice });
+  return { label, redTeamChoice };
+}
 
+async function collectPromptsAndPurpose(
+  template: RedteamInitTemplate,
+  redTeamChoice: RedteamChoice,
+): Promise<PromptCollectionResult> {
   const prompts: string[] = [];
-  let purpose: string | undefined;
-
-  const useCustomProvider =
-    redTeamChoice === 'rag' ||
-    redTeamChoice === 'agent' ||
-    redTeamChoice === 'http_endpoint' ||
-    redTeamChoice === 'not_sure';
-  let deferGeneration = useCustomProvider;
   const defaultPrompt = template.defaultPrompt;
   const defaultPurpose = template.defaultPurpose;
+  const useCustomProvider = getUseCustomProvider(redTeamChoice);
+  let purpose: string | undefined;
+  let deferGeneration = useCustomProvider;
+
   if (useCustomProvider) {
     purpose =
       (await input({
         message: template.purposeMessage(defaultPurpose),
       })) || defaultPurpose;
-
     recordOnboardingStep('choose purpose', { value: purpose });
-  } else if (redTeamChoice === 'prompt_model_chatbot') {
+    return { prompts, purpose, useCustomProvider, deferGeneration };
+  }
+
+  if (redTeamChoice === 'prompt_model_chatbot') {
     const promptChoice = await select({
       message: template.promptTimingMessage,
       choices: [
@@ -602,95 +628,115 @@ export async function redteamInit(
 
     recordOnboardingStep('choose prompt', { value: promptChoice });
 
-    let prompt: string;
     if (promptChoice === 'now') {
-      prompt = await getSystemPrompt(template);
+      prompts.push(await getSystemPrompt(template));
     } else {
-      prompt = defaultPrompt;
+      prompts.push(defaultPrompt);
       deferGeneration = true;
     }
-    prompts.push(prompt);
-  } else {
-    prompts.push(defaultPrompt);
+
+    return { prompts, purpose, useCustomProvider, deferGeneration };
   }
 
-  let providers: (string | ProviderOptions)[];
-  let writeChatPy = false;
+  prompts.push(defaultPrompt);
+  return { prompts, purpose, useCustomProvider, deferGeneration };
+}
+
+function getProviderChoices(template: RedteamInitTemplate): { name: string; value: string }[] {
+  return [
+    { name: template.chooseLaterModel, value: 'Other' },
+    { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
+    { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
+    {
+      name: 'anthropic:claude-opus-4-6',
+      value: 'anthropic:messages:claude-opus-4-6',
+    },
+    {
+      name: 'anthropic:claude-opus-4-5-20251101',
+      value: 'anthropic:messages:claude-opus-4-5-20251101',
+    },
+    {
+      name: 'anthropic:claude-sonnet-4-5-20250929',
+      value: 'anthropic:messages:claude-sonnet-4-5-20250929',
+    },
+    {
+      name: 'anthropic:claude-opus-4-1-20250805',
+      value: 'anthropic:messages:claude-opus-4-1-20250805',
+    },
+    {
+      name: 'anthropic:claude-3-7-sonnet-20250219',
+      value: 'anthropic:messages:claude-3-7-sonnet-20250219',
+    },
+    {
+      name: 'Google Vertex Gemini 2.5 Pro',
+      value: 'vertex:gemini-2.5-pro',
+    },
+  ];
+}
+
+async function selectProviders(
+  template: RedteamInitTemplate,
+  redTeamChoice: RedteamChoice,
+  label: string,
+  useCustomProvider: boolean,
+): Promise<ProviderSelectionResult> {
   if (useCustomProvider) {
     if (redTeamChoice === 'http_endpoint' || redTeamChoice === 'not_sure') {
-      providers = [
-        {
-          id: 'https',
-          label,
-          config: {
-            url: 'https://example.com/generate',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: {
-              myPrompt: '{{prompt}}',
+      return {
+        providers: [
+          {
+            id: 'https',
+            label,
+            config: {
+              url: 'https://example.com/generate',
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: {
+                myPrompt: '{{prompt}}',
+              },
             },
           },
-        },
-      ];
-    } else {
-      providers = ['file://chat.py'];
-      writeChatPy = true;
+        ],
+        writeChatPy: false,
+      };
     }
-  } else {
-    const providerChoices = [
-      { name: template.chooseLaterModel, value: 'Other' },
-      { name: 'openai:gpt-4o-mini', value: 'openai:gpt-4o-mini' },
-      { name: 'openai:gpt-4o', value: 'openai:gpt-4o' },
-      {
-        name: 'anthropic:claude-opus-4-6',
-        value: 'anthropic:messages:claude-opus-4-6',
-      },
-      {
-        name: 'anthropic:claude-opus-4-5-20251101',
-        value: 'anthropic:messages:claude-opus-4-5-20251101',
-      },
-      {
-        name: 'anthropic:claude-sonnet-4-5-20250929',
-        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
-      },
-      {
-        name: 'anthropic:claude-opus-4-1-20250805',
-        value: 'anthropic:messages:claude-opus-4-1-20250805',
-      },
-      {
-        name: 'anthropic:claude-3-7-sonnet-20250219',
-        value: 'anthropic:messages:claude-3-7-sonnet-20250219',
-      },
-      {
-        name: 'Google Vertex Gemini 2.5 Pro',
-        value: 'vertex:gemini-2.5-pro',
-      },
-    ];
-
-    const selectedProvider = await select({
-      message: template.chooseModelMessage,
-      choices: providerChoices,
-      pageSize: process.stdout.rows - 6,
-    });
-
-    recordOnboardingStep('choose provider', { value: selectedProvider });
-
-    if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4o-mini', label }];
-    } else {
-      providers = [{ id: selectedProvider, label }];
-    }
+    return {
+      providers: ['file://chat.py'],
+      writeChatPy: true,
+    };
   }
 
-  console.clear();
+  const selectedProvider = await select({
+    message: template.chooseModelMessage,
+    choices: getProviderChoices(template),
+    pageSize: process.stdout.rows - 6,
+  });
+  recordOnboardingStep('choose provider', { value: selectedProvider });
 
-  recordOnboardingStep('begin plugin & strategy selection');
+  return {
+    providers:
+      selectedProvider === 'Other'
+        ? [{ id: 'openai:gpt-4o-mini', label }]
+        : [{ id: selectedProvider, label }],
+    writeChatPy: false,
+  };
+}
 
-  logger.info(chalk.bold(template.pluginTitle));
-  logger.info(template.pluginSubtitle);
+function getDefaultPluginsForChoice(
+  redTeamChoice: RedteamChoice,
+): (Plugin | RedteamPluginObject)[] {
+  if (redTeamChoice === 'agent') {
+    return [...DEFAULT_PLUGINS, 'rbac', 'bola', 'bfla', 'ssrf'];
+  }
+  return Array.from(DEFAULT_PLUGINS);
+}
 
+async function selectPlugins(
+  template: RedteamInitTemplate,
+  redTeamChoice: RedteamChoice,
+): Promise<(Plugin | RedteamPluginObject)[]> {
   const pluginConfigChoice = await select({
     message: template.pluginConfigMessage,
     choices: [
@@ -701,130 +747,178 @@ export async function redteamInit(
 
   recordOnboardingStep('choose plugin config method', { value: pluginConfigChoice });
 
-  let plugins: (Plugin | RedteamPluginObject)[];
-
   if (pluginConfigChoice === 'default') {
-    if (redTeamChoice === 'rag') {
-      plugins = Array.from(DEFAULT_PLUGINS);
-    } else if (redTeamChoice === 'agent') {
-      plugins = [...DEFAULT_PLUGINS, 'rbac', 'bola', 'bfla', 'ssrf'];
-    } else {
-      plugins = Array.from(DEFAULT_PLUGINS);
-    }
-  } else {
-    const pluginChoices = Array.from(ALL_PLUGINS)
-      .sort()
-      .map((plugin) => ({
-        name: `${plugin} - ${subCategoryDescriptions[plugin] || template.noDescriptionLabel}`,
-        value: plugin,
-        checked: DEFAULT_PLUGINS.has(plugin),
-      }));
-
-    plugins = await checkbox({
-      message: template.pluginSelectMessage,
-      choices: pluginChoices,
-      pageSize: process.stdout.rows - 6,
-      loop: false,
-      validate: (answer) => answer.length > 0 || template.mustSelectPluginMessage,
-    });
-
-    recordOnboardingStep('choose plugins', {
-      value: plugins.map((p) => (typeof p === 'string' ? p : p.id)),
-    });
+    return getDefaultPluginsForChoice(redTeamChoice);
   }
 
-  // Plugins that require additional configuration
+  const pluginChoices = Array.from(ALL_PLUGINS)
+    .sort()
+    .map((plugin) => ({
+      name: `${plugin} - ${subCategoryDescriptions[plugin] || template.noDescriptionLabel}`,
+      value: plugin,
+      checked: DEFAULT_PLUGINS.has(plugin),
+    }));
 
-  if (plugins.includes('policy')) {
-    const policyIndex = plugins.indexOf('policy');
-    if (policyIndex !== -1) {
-      plugins.splice(policyIndex, 1);
-    }
+  const selectedPlugins = await checkbox({
+    message: template.pluginSelectMessage,
+    choices: pluginChoices,
+    pageSize: process.stdout.rows - 6,
+    loop: false,
+    validate: (answer) => answer.length > 0 || template.mustSelectPluginMessage,
+  });
 
-    recordOnboardingStep('collect policy');
-    const policyDescription = await input({
-      message: template.policyPromptMessage,
-    });
-    recordOnboardingStep('choose policy', { value: policyDescription.length });
+  recordOnboardingStep('choose plugins', {
+    value: selectedPlugins.map((p) => (typeof p === 'string' ? p : p.id)),
+  });
 
-    if (policyDescription.trim() !== '') {
-      plugins.push({
-        id: 'policy',
-        config: { policy: policyDescription.trim() },
-      } as RedteamPluginObject);
-    }
+  return selectedPlugins;
+}
+
+function removePluginById(
+  plugins: (Plugin | RedteamPluginObject)[],
+  pluginId: string,
+): (Plugin | RedteamPluginObject)[] {
+  return plugins.filter((plugin) =>
+    typeof plugin === 'string' ? plugin !== pluginId : plugin.id !== pluginId,
+  );
+}
+
+async function configurePolicyPlugin(
+  plugins: (Plugin | RedteamPluginObject)[],
+  template: RedteamInitTemplate,
+): Promise<(Plugin | RedteamPluginObject)[]> {
+  if (!plugins.includes('policy')) {
+    return plugins;
   }
 
-  if (plugins.includes('intent')) {
-    const intentIndex = plugins.indexOf('intent');
-    if (intentIndex !== -1) {
-      plugins.splice(intentIndex, 1);
-    }
+  recordOnboardingStep('collect policy');
+  const policyDescription = await input({
+    message: template.policyPromptMessage,
+  });
+  recordOnboardingStep('choose policy', { value: policyDescription.length });
 
-    recordOnboardingStep('collect intent');
-    const intentDescription = await input({
-      message: template.intentPromptMessage,
-    });
-    recordOnboardingStep('choose intent', { value: intentDescription.length });
-
-    if (intentDescription.trim() !== '') {
-      plugins.push({
-        id: 'intent',
-        config: { intent: intentDescription.trim() },
-      } as RedteamPluginObject);
-    }
+  const nextPlugins = removePluginById(plugins, 'policy');
+  if (policyDescription.trim() === '') {
+    return nextPlugins;
   }
 
-  if (plugins.includes('prompt-extraction')) {
-    plugins = plugins.filter((p) => p !== 'prompt-extraction');
-    plugins.push({
+  return [
+    ...nextPlugins,
+    {
+      id: 'policy',
+      config: { policy: policyDescription.trim() },
+    } as RedteamPluginObject,
+  ];
+}
+
+async function configureIntentPlugin(
+  plugins: (Plugin | RedteamPluginObject)[],
+  template: RedteamInitTemplate,
+): Promise<(Plugin | RedteamPluginObject)[]> {
+  if (!plugins.includes('intent')) {
+    return plugins;
+  }
+
+  recordOnboardingStep('collect intent');
+  const intentDescription = await input({
+    message: template.intentPromptMessage,
+  });
+  recordOnboardingStep('choose intent', { value: intentDescription.length });
+
+  const nextPlugins = removePluginById(plugins, 'intent');
+  if (intentDescription.trim() === '') {
+    return nextPlugins;
+  }
+
+  return [
+    ...nextPlugins,
+    {
+      id: 'intent',
+      config: { intent: intentDescription.trim() },
+    } as RedteamPluginObject,
+  ];
+}
+
+function configurePromptExtractionPlugin(
+  plugins: (Plugin | RedteamPluginObject)[],
+  prompts: string[],
+): (Plugin | RedteamPluginObject)[] {
+  if (!plugins.includes('prompt-extraction')) {
+    return plugins;
+  }
+
+  return [
+    ...removePluginById(plugins, 'prompt-extraction'),
+    {
       id: 'prompt-extraction',
       config: { systemPrompt: prompts[0] },
-    } as RedteamPluginObject);
+    } as RedteamPluginObject,
+  ];
+}
+
+async function configureIndirectPromptInjectionPlugin(
+  plugins: (Plugin | RedteamPluginObject)[],
+  prompts: string[],
+  template: RedteamInitTemplate,
+): Promise<(Plugin | RedteamPluginObject)[]> {
+  if (!plugins.includes('indirect-prompt-injection')) {
+    return plugins;
   }
 
-  if (plugins.includes('indirect-prompt-injection')) {
-    recordOnboardingStep('choose indirect prompt injection variable');
-    logger.info(chalk.bold(template.indirectPromptInjectionTitle));
-    if (prompts.length === 0) {
-      plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
-      recordOnboardingStep('skip indirect prompt injection');
-      logger.warn(template.indirectNoPromptWarning);
-    } else {
-      const variables = extractVariablesFromTemplate(prompts[0]);
-      if (variables.length > 1) {
-        const indirectInjectionVar = await select({
-          message: template.indirectPromptVariableMessage,
-          choices: variables.sort().map((variable) => ({
-            name: variable,
-            value: variable,
-          })),
-        });
-        recordOnboardingStep('chose indirect prompt injection variable');
-        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
-        plugins.push({
-          id: 'indirect-prompt-injection',
-          config: {
-            indirectInjectionVar,
-          },
-        } as RedteamPluginObject);
-      } else {
-        plugins = plugins.filter((p) => p !== 'indirect-prompt-injection');
-        recordOnboardingStep('skip indirect prompt injection');
-        logger.warn(template.indirectMissingVariablesWarning);
-      }
-    }
+  recordOnboardingStep('choose indirect prompt injection variable');
+  logger.info(chalk.bold(template.indirectPromptInjectionTitle));
+
+  if (prompts.length === 0) {
+    recordOnboardingStep('skip indirect prompt injection');
+    logger.warn(template.indirectNoPromptWarning);
+    return removePluginById(plugins, 'indirect-prompt-injection');
   }
 
-  console.clear();
+  const variables = extractVariablesFromTemplate(prompts[0]);
+  if (variables.length <= 1) {
+    recordOnboardingStep('skip indirect prompt injection');
+    logger.warn(template.indirectMissingVariablesWarning);
+    return removePluginById(plugins, 'indirect-prompt-injection');
+  }
 
-  logger.info(
-    dedent`
-    ${chalk.bold(template.strategyTitle)}
-    ${template.strategySubtitle}
-  `,
+  const indirectInjectionVar = await select({
+    message: template.indirectPromptVariableMessage,
+    choices: variables.sort().map((variable) => ({
+      name: variable,
+      value: variable,
+    })),
+  });
+  recordOnboardingStep('chose indirect prompt injection variable');
+
+  return [
+    ...removePluginById(plugins, 'indirect-prompt-injection'),
+    {
+      id: 'indirect-prompt-injection',
+      config: {
+        indirectInjectionVar,
+      },
+    } as RedteamPluginObject,
+  ];
+}
+
+async function applyPluginConfigurations(
+  plugins: (Plugin | RedteamPluginObject)[],
+  prompts: string[],
+  template: RedteamInitTemplate,
+): Promise<(Plugin | RedteamPluginObject)[]> {
+  let configuredPlugins = plugins;
+  configuredPlugins = await configurePolicyPlugin(configuredPlugins, template);
+  configuredPlugins = await configureIntentPlugin(configuredPlugins, template);
+  configuredPlugins = configurePromptExtractionPlugin(configuredPlugins, prompts);
+  configuredPlugins = await configureIndirectPromptInjectionPlugin(
+    configuredPlugins,
+    prompts,
+    template,
   );
+  return configuredPlugins;
+}
 
+async function selectStrategies(template: RedteamInitTemplate): Promise<Strategy[]> {
   const strategyConfigChoice = await select({
     message: template.strategyConfigMessage,
     choices: [
@@ -835,92 +929,199 @@ export async function redteamInit(
 
   recordOnboardingStep('choose strategy config method', { value: strategyConfigChoice });
 
-  let strategies: Strategy[];
-
   if (strategyConfigChoice === 'default') {
-    // TODO(ian): Differentiate strategies
-    if (redTeamChoice === 'rag') {
-      strategies = Array.from(DEFAULT_STRATEGIES);
-    } else if (redTeamChoice === 'agent') {
-      strategies = Array.from(DEFAULT_STRATEGIES);
-    } else {
-      strategies = Array.from(DEFAULT_STRATEGIES);
-    }
-  } else {
-    const strategyChoices = [
-      ...Array.from(DEFAULT_STRATEGIES).sort(),
-      new Separator(),
-      ...Array.from(ADDITIONAL_STRATEGIES).sort(),
-    ].map((strategy) =>
-      typeof strategy === 'string'
-        ? {
-            name: `${strategy} - ${subCategoryDescriptions[strategy] || template.noDescriptionLabel}`,
-            value: strategy,
-            checked: DEFAULT_STRATEGIES.includes(strategy as any),
-          }
-        : strategy,
-    );
-
-    strategies = await checkbox({
-      message: template.strategySelectMessage,
-      choices: strategyChoices,
-      pageSize: process.stdout.rows - 6,
-      loop: false,
-    });
+    return Array.from(DEFAULT_STRATEGIES);
   }
+
+  const strategyChoices = [
+    ...Array.from(DEFAULT_STRATEGIES).sort(),
+    new Separator(),
+    ...Array.from(ADDITIONAL_STRATEGIES).sort(),
+  ].map((strategy) =>
+    typeof strategy === 'string'
+      ? {
+          name: `${strategy} - ${subCategoryDescriptions[strategy] || template.noDescriptionLabel}`,
+          value: strategy,
+          checked: DEFAULT_STRATEGIES.includes(strategy as any),
+        }
+      : strategy,
+  );
+
+  return checkbox({
+    message: template.strategySelectMessage,
+    choices: strategyChoices,
+    pageSize: process.stdout.rows - 6,
+    loop: false,
+  });
+}
+
+async function ensureHarmfulPluginConsent(
+  template: RedteamInitTemplate,
+  plugins: (Plugin | RedteamPluginObject)[],
+): Promise<void> {
+  const hasHarmfulPlugin = plugins.some(
+    (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
+  );
+  if (!hasHarmfulPlugin) {
+    return;
+  }
+
+  recordOnboardingStep('collect email');
+  const { hasHarmfulRedteamConsent } = readGlobalConfig();
+  if (hasHarmfulRedteamConsent) {
+    return;
+  }
+
+  const existingEmail = getUserEmail();
+  let email = existingEmail;
+  if (!existingEmail) {
+    logger.info(template.harmfulConsentMessage1);
+    logger.info(template.harmfulConsentMessage2);
+
+    email = await input({
+      message: `${chalk.bold(template.workEmailMessage)}:`,
+      validate: (value) => {
+        return value.includes('@') || template.validEmailMessage;
+      },
+    });
+    setUserEmail(email);
+  }
+
+  if (!email) {
+    return;
+  }
+
+  try {
+    await telemetry.saveConsent(email, {
+      source: 'redteam init',
+    });
+    writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
+  } catch (err) {
+    logger.debug(`Failed to save consent: ${(err as Error).message}`);
+  }
+}
+
+function removeRedundantHarmfulPlugin(
+  plugins: (Plugin | RedteamPluginObject)[],
+): (Plugin | RedteamPluginObject)[] {
+  const pluginIds = plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id));
+  const hasHarmfulCollection = pluginIds.includes('harmful');
+  const hasAllHarmPlugins = Object.keys(HARM_PLUGINS).every((plugin) => pluginIds.includes(plugin));
+
+  if (!hasHarmfulCollection || !hasAllHarmPlugins) {
+    return plugins;
+  }
+
+  return removePluginById(plugins, 'harmful');
+}
+
+async function maybeGenerateRedteamTests({
+  configPath,
+  deferGeneration,
+  numTests,
+  plugins,
+  purpose,
+  template,
+}: {
+  configPath: string;
+  deferGeneration: boolean;
+  numTests: number;
+  plugins: (Plugin | RedteamPluginObject)[];
+  purpose: string | undefined;
+  template: RedteamInitTemplate;
+}): Promise<void> {
+  if (deferGeneration) {
+    logger.info('\n' + chalk.green(template.deferGenerationMessage));
+    return;
+  }
+
+  recordOnboardingStep('offer generate');
+  const readyToGenerate = await confirm({
+    message: template.readyToGenerateMessage,
+    default: true,
+  });
+  recordOnboardingStep('choose generate', { value: readyToGenerate });
+
+  if (!readyToGenerate) {
+    logger.info('\n' + chalk.blue(template.generateLaterMessage));
+    return;
+  }
+
+  try {
+    await doGenerateRedteam({
+      purpose,
+      plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+      cache: false,
+      write: false,
+      output: 'redteam.yaml',
+      defaultConfig: {},
+      defaultConfigPath: configPath,
+      numTests,
+    });
+  } catch (error) {
+    if (error instanceof ProbeLimitExceededError) {
+      // doGenerateRedteam already logged the user-facing quota message.
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function redteamInit(
+  directory: string | undefined,
+  locale: string | undefined = undefined,
+) {
+  telemetry.record('redteam init', { phase: 'started' });
+  recordOnboardingStep('start');
+  const resolvedLocale = resolveRedteamInitLocale(locale);
+  const template = REDTEAM_INIT_TEMPLATES[resolvedLocale];
+  const { projectDir, configPath } = await prepareProjectPaths(directory);
+
+  console.clear();
+  logger.info(chalk.bold(template.title));
+
+  const { label, redTeamChoice } = await promptTargetMetadata(template);
+
+  recordOnboardingStep('choose app type', { value: redTeamChoice });
+  const { prompts, purpose, useCustomProvider, deferGeneration } = await collectPromptsAndPurpose(
+    template,
+    redTeamChoice,
+  );
+  const { providers, writeChatPy } = await selectProviders(
+    template,
+    redTeamChoice,
+    label,
+    useCustomProvider,
+  );
+
+  console.clear();
+
+  recordOnboardingStep('begin plugin & strategy selection');
+
+  logger.info(chalk.bold(template.pluginTitle));
+  logger.info(template.pluginSubtitle);
+
+  let plugins = await selectPlugins(template, redTeamChoice);
+  plugins = await applyPluginConfigurations(plugins, prompts, template);
+
+  console.clear();
+
+  logger.info(
+    dedent`
+    ${chalk.bold(template.strategyTitle)}
+    ${template.strategySubtitle}
+  `,
+  );
+
+  const strategies = await selectStrategies(template);
 
   recordOnboardingStep('choose strategies', {
     value: strategies,
   });
 
-  const hasHarmfulPlugin = plugins.some(
-    (plugin) => typeof plugin === 'string' && plugin.startsWith('harmful'),
-  );
-  if (hasHarmfulPlugin) {
-    recordOnboardingStep('collect email');
-    const { hasHarmfulRedteamConsent } = readGlobalConfig();
-    if (!hasHarmfulRedteamConsent) {
-      const existingEmail = getUserEmail();
-      let email = existingEmail;
-      if (!existingEmail) {
-        logger.info(template.harmfulConsentMessage1);
-        logger.info(template.harmfulConsentMessage2);
-
-        email = await input({
-          message: `${chalk.bold(template.workEmailMessage)}:`,
-          validate: (value) => {
-            return value.includes('@') || template.validEmailMessage;
-          },
-        });
-        setUserEmail(email);
-      }
-
-      if (email) {
-        try {
-          await telemetry.saveConsent(email, {
-            source: 'redteam init',
-          });
-          writeGlobalConfigPartial({ hasHarmfulRedteamConsent: true });
-        } catch (err) {
-          logger.debug(`Failed to save consent: ${(err as Error).message}`);
-        }
-      }
-    }
-  }
-
-  // Remove harmful plugin collection if all harmful plugins are already selected
-  if (
-    plugins
-      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
-      .includes('harmful') &&
-    Object.keys(HARM_PLUGINS).every((plugin: string) =>
-      plugins.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)).includes(plugin),
-    )
-  ) {
-    plugins = plugins.filter((plugin) =>
-      typeof plugin === 'string' ? plugin !== 'harmful' : plugin.id !== 'harmful',
-    );
-  }
+  await ensureHarmfulPluginConsent(template, plugins);
+  plugins = removeRedundantHarmfulPlugin(plugins);
 
   const numTests = 5;
 
@@ -948,41 +1149,14 @@ export async function redteamInit(
   telemetry.record('redteam init', { phase: 'completed' });
   await recordOnboardingStep('finish');
 
-  if (deferGeneration) {
-    logger.info('\n' + chalk.green(template.deferGenerationMessage));
-    return;
-  } else {
-    recordOnboardingStep('offer generate');
-    const readyToGenerate = await confirm({
-      message: template.readyToGenerateMessage,
-      default: true,
-    });
-    recordOnboardingStep('choose generate', { value: readyToGenerate });
-
-    if (readyToGenerate) {
-      try {
-        await doGenerateRedteam({
-          purpose,
-          plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-          cache: false,
-          write: false,
-          output: 'redteam.yaml',
-          defaultConfig: {},
-          defaultConfigPath: configPath,
-          numTests,
-        });
-      } catch (error) {
-        if (error instanceof ProbeLimitExceededError) {
-          // doGenerateRedteam already logged the user-facing quota message.
-          process.exitCode = 1;
-          return;
-        }
-        throw error;
-      }
-    } else {
-      logger.info('\n' + chalk.blue(template.generateLaterMessage));
-    }
-  }
+  await maybeGenerateRedteamTests({
+    configPath,
+    deferGeneration,
+    numTests,
+    plugins,
+    purpose,
+    template,
+  });
 }
 
 export function initCommand(program: Command) {
