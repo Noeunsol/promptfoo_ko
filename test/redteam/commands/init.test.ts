@@ -14,6 +14,7 @@ import {
   redteamInit,
   initCommand as redteamInitCommand,
   renderRedteamConfig,
+  resolveRedteamInitLocale,
 } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
@@ -179,6 +180,25 @@ describe('renderRedteamConfig', () => {
       },
     });
   });
+
+  it('should render korean template when locale is ko', () => {
+    const input = {
+      purpose: '한국어 레드팀 테스트',
+      language: 'ko',
+      locale: 'ko' as const,
+      numTests: 2,
+      plugins: [],
+      strategies: [],
+      prompts: [],
+      providers: [],
+      descriptions: {},
+    };
+
+    const renderedConfig = renderRedteamConfig(input);
+    expect(renderedConfig).toContain('description: "나의 첫 레드팀"');
+    expect(renderedConfig).toContain('# 레드팀 설정 파일');
+    expect(renderedConfig).toContain('language: "ko"');
+  });
 });
 
 describe('redteamInit', () => {
@@ -240,5 +260,29 @@ describe('redteamInit', () => {
 
     expect(process.exitCode).toBe(130);
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('should support korean locale prompts', async () => {
+    await redteamInit(undefined, 'ko');
+
+    expect(input).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('레드팀 테스트할 대상 이름'),
+      }),
+    );
+  });
+});
+
+describe('resolveRedteamInitLocale', () => {
+  it('should resolve korean locale values', () => {
+    expect(resolveRedteamInitLocale('ko')).toBe('ko');
+    expect(resolveRedteamInitLocale('ko-KR')).toBe('ko');
+    expect(resolveRedteamInitLocale('korean')).toBe('ko');
+  });
+
+  it('should default to english for unknown values', () => {
+    expect(resolveRedteamInitLocale(undefined)).toBe('en');
+    expect(resolveRedteamInitLocale('en')).toBe('en');
+    expect(resolveRedteamInitLocale('fr')).toBe('en');
   });
 });
