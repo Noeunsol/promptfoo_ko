@@ -65,7 +65,7 @@ interface ResultsChartsSectionProps {
   isRedteamEval: boolean;
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
-  children: (toggleButton: React.ReactNode) => React.ReactNode;
+  children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
 interface AppliedFilterBadgesProps {
@@ -157,7 +157,7 @@ function AppliedFilterBadges({
         <button
           type="button"
           onClick={() => onRemoveFilter(filter.id)}
-          className="ml-1 hover:bg-muted rounded-full"
+          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
         >
           <X className="size-3" />
         </button>
@@ -166,7 +166,7 @@ function AppliedFilterBadges({
   });
 }
 
-function ResultsChartsSection({
+export function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
@@ -178,7 +178,7 @@ function ResultsChartsSection({
   );
 
   if (isRedteamEval) {
-    return null;
+    return <>{children(null)}</>;
   }
 
   const toggleButton = (
@@ -201,27 +201,28 @@ function ResultsChartsSection({
           pointerEvents: renderResultsCharts ? 'auto' : 'none',
         }}
       >
-        {canRenderResultsCharts ? (
-          <ResultsCharts scores={resultsChartsScores} />
-        ) : (
-          <Alert variant="info" className="mt-4 items-start">
-            <BarChart className="size-4 mt-0.5" />
-            <AlertContent>
-              <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  We can show charts when the results include comparable prompts and chartable
-                  scores.
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {resultsChartsUnavailableReasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </AlertContent>
-          </Alert>
-        )}
+        {renderResultsCharts &&
+          (canRenderResultsCharts ? (
+            <ResultsCharts scores={resultsChartsScores} />
+          ) : (
+            <Alert variant="info" className="mt-4 items-start">
+              <BarChart className="size-4 mt-0.5" />
+              <AlertContent>
+                <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    We can show charts when the results include comparable prompts and chartable
+                    scores.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {resultsChartsUnavailableReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))}
       </div>
     </>
   );
@@ -702,7 +703,7 @@ export default function ResultsView({
     if (!table?.body) {
       return [];
     }
-    return table?.body
+    return table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
@@ -827,7 +828,7 @@ export default function ResultsView({
                       value={String(resultsTableZoom)}
                       onValueChange={(val) => setResultsTableZoom(Number(val))}
                     >
-                      <SelectTrigger className="w-[115px] h-8 text-xs">
+                      <SelectTrigger aria-label="Results zoom" className="w-[115px] h-8 text-xs">
                         <span>
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                             ZOOM
@@ -881,13 +882,13 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 4
+                        {debouncedSearchText.length > 5
                           ? debouncedSearchText.substring(0, 5) + '...'
                           : debouncedSearchText}
                         <button
                           type="button"
                           onClick={handleClearSearch}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -899,7 +900,7 @@ export default function ResultsView({
                         <button
                           type="button"
                           onClick={() => setFilterMode('all')}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -950,7 +951,7 @@ export default function ResultsView({
           )}
         </EvalHeader>
         {activeView === 'results' && (
-          <div className="px-4">
+          <div className="px-4 flex flex-1 min-h-0 flex-col">
             <ResultsTable
               key={currentEvalId}
               maxTextLength={maxTextLength}
