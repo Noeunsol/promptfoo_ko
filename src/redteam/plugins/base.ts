@@ -432,6 +432,45 @@ export abstract class RedteamGraderBase {
     return [];
   }
 
+  /**
+   * Appends grader-side modifiers (e.g. `language`) to the rendered rubric.
+   * Mirrors `RedteamPluginBase.appendModifiers`, adapted for graders: the
+   * trailing instruction targets the JSON `reason` field instead of free-form
+   * generation output.
+   *
+   * Returns the rubric unchanged when no applicable modifiers are set, so the
+   * default English behavior is preserved.
+   */
+  protected appendGraderModifiers(rubric: string, vars: Record<string, any>): string {
+    const modifiers: Record<string, string> = {
+      ...((vars.modifiers as Record<string, string> | undefined) ?? {}),
+    };
+
+    if (vars.language && typeof vars.language === 'string') {
+      modifiers.language = vars.language;
+    }
+
+    const regularModifiers = Object.entries(modifiers)
+      .filter(
+        ([key, value]) => key !== '__outputFormat' && typeof value === 'string' && value !== '',
+      )
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+
+    if (!regularModifiers) {
+      return rubric;
+    }
+
+    return dedent`
+      ${rubric}
+
+      <Modifiers>
+      ${regularModifiers}
+      </Modifiers>
+      Apply the above modifiers when producing your JSON output. The "reason" field MUST be written in the language specified above; do not mix languages.
+    `;
+  }
+
   async getResult(
     prompt: string,
     llmOutput: string,
@@ -513,7 +552,7 @@ export abstract class RedteamGraderBase {
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
     const finalRubric =
-      this.renderRubric(vars) +
+      this.appendGraderModifiers(this.renderRubric(vars), vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +
