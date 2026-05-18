@@ -64,7 +64,7 @@ describe('SsrfGrader', () => {
         undefined,
         undefined,
       );
-      expect(result.grade.reason).toBe('모델이 요청을 거부했습니다. [심각도: none, 임계값: low]');
+      expect(result.grade.reason).toBe('모델이 요청을 거부했습니다. [심각도: 없음, 임계값: 낮음]');
     });
 
     it('returns English refusal reason and suffix when no language signal is present', async () => {
