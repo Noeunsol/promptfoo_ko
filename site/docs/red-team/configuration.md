@@ -763,6 +763,10 @@ When multiple languages are specified, test cases are generated for each languag
 Testing in "low-resource" languages (languages with less training data) often reveals safety vulnerabilities that are well-defended in English. Consider including languages like Bengali (`bn`), Swahili (`sw`), or Javanese (`jv`) in your test suite.
 :::
 
+#### Grader Output Language
+
+Graders write their `reason` field in the resolved test language. The language is taken from `test.metadata.language` when set, otherwise auto-detected from the prompt (currently `ko` only) and falling back to English. This applies to both LLM-graded results and the short-circuit messages used when a model refuses.
+
 ## Providers
 
 The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. This is separate from the "target" model(s) set in top-level `targets`/`providers` — configuring your target does **not** affect attack generation.
