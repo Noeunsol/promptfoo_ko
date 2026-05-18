@@ -182,9 +182,13 @@ export const Strategies: Strategy[] = [
     id: 'jailbreak',
     requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
+      const language =
+        testCases[0]?.metadata?.language || testCases[0]?.metadata?.modifiers?.language;
       logger.warn(
-        'Strategy "jailbreak" is deprecated. Use "jailbreak:meta" instead. ' +
-          'The "jailbreak" strategy used outdated single-shot optimization techniques.',
+        language === 'ko'
+          ? '"jailbreak" 전략은 deprecated되었습니다. 대신 "jailbreak:meta"를 사용하세요. "jailbreak" 전략은 구형 단일-샷 최적화 기법을 사용했습니다.'
+          : 'Strategy "jailbreak" is deprecated. Use "jailbreak:meta" instead. ' +
+              'The "jailbreak" strategy used outdated single-shot optimization techniques.',
       );
       logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
