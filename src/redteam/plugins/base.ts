@@ -21,6 +21,7 @@ import {
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
+  resolveGraderLanguage,
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
@@ -514,6 +515,7 @@ export abstract class RedteamGraderBase {
       traceContext: gradingContext?.traceContext,
       traceInsights: gradingContext?.traceContext?.insights,
       timestamp: new Date().toISOString(),
+      language: resolveGraderLanguage(test, prompt, llmOutput),
     };
     // Plugin-specific grading guidance takes priority over general rubric
     // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias for backward compatibility)

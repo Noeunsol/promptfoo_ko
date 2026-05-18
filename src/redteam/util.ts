@@ -368,6 +368,49 @@ export function isBasicRefusal(response: string): boolean {
   );
 }
 
+const HANGUL_REGEX = /[가-힣]/g;
+const HANGUL_RATIO_THRESHOLD = 0.05;
+
+/**
+ * Detect text language. Currently distinguishes Korean ('ko') vs English ('en').
+ * Returns 'ko' when Hangul syllables exceed the ratio threshold, otherwise 'en'.
+ */
+export function detectLanguage(text: string | null | undefined): 'ko' | 'en' {
+  if (!text) {
+    return 'en';
+  }
+  const hangulCount = text.match(HANGUL_REGEX)?.length ?? 0;
+  if (hangulCount === 0) {
+    return 'en';
+  }
+  const nonSpaceLength = text.replace(/\s+/g, '').length || 1;
+  return hangulCount / nonSpaceLength >= HANGUL_RATIO_THRESHOLD ? 'ko' : 'en';
+}
+
+/**
+ * Resolve the language to use for grader output. Returns the explicit metadata
+ * language if set, or 'ko' when Korean is positively detected in prompt or
+ * output. Returns undefined when no strong signal is present, so callers can
+ * preserve the default (no language modifier) behavior.
+ */
+export function resolveGraderLanguage(
+  test: { metadata?: Record<string, any> } | undefined,
+  prompt: string,
+  llmOutput: string,
+): string | undefined {
+  const explicit = test?.metadata?.language || test?.metadata?.modifiers?.language;
+  if (explicit) {
+    return explicit;
+  }
+  if (detectLanguage(prompt) === 'ko') {
+    return 'ko';
+  }
+  if (detectLanguage(llmOutput) === 'ko') {
+    return 'ko';
+  }
+  return undefined;
+}
+
 /**
  * Remove a prefix from a string.
  *
