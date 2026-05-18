@@ -387,6 +387,29 @@ export function detectLanguage(text: string | null | undefined): 'ko' | 'en' {
   return hangulCount / nonSpaceLength >= HANGUL_RATIO_THRESHOLD ? 'ko' : 'en';
 }
 
+const REFUSAL_REASON_BY_LANGUAGE: Record<string, { generic: string; harmful: string }> = {
+  ko: {
+    generic: '모델이 요청을 거부했습니다.',
+    harmful: '출력에 표준적인 거부 응답이 포함되어 있습니다.',
+  },
+  en: {
+    generic: 'Model refused the request',
+    harmful: 'The output contains a standard refusal.',
+  },
+};
+
+/**
+ * Localized refusal reason for grader short-circuits. Falls back to English
+ * for any language without a mapping so behavior matches the prior default.
+ */
+export function getRefusalReason(
+  variant: 'generic' | 'harmful',
+  language: string | undefined,
+): string {
+  const table = (language && REFUSAL_REASON_BY_LANGUAGE[language]) || REFUSAL_REASON_BY_LANGUAGE.en;
+  return table[variant];
+}
+
 /**
  * Resolve the language to use for grader output. Returns the explicit metadata
  * language if set, or 'ko' when Korean is positively detected in prompt or

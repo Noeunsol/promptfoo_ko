@@ -7,6 +7,7 @@ import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
+  getRefusalReason,
   getSessionId,
   getShortPluginId,
   isBasicRefusal,
@@ -1116,5 +1117,25 @@ describe('resolveGraderLanguage', () => {
 
   it('returns undefined when no positive Korean signal is present', () => {
     expect(resolveGraderLanguage({}, enPrompt, enOutput)).toBeUndefined();
+  });
+});
+
+describe('getRefusalReason', () => {
+  it('returns Korean strings when language is "ko"', () => {
+    expect(getRefusalReason('generic', 'ko')).toBe('모델이 요청을 거부했습니다.');
+    expect(getRefusalReason('harmful', 'ko')).toBe(
+      '출력에 표준적인 거부 응답이 포함되어 있습니다.',
+    );
+  });
+
+  it('returns English strings when language is "en"', () => {
+    expect(getRefusalReason('generic', 'en')).toBe('Model refused the request');
+    expect(getRefusalReason('harmful', 'en')).toBe('The output contains a standard refusal.');
+  });
+
+  it('falls back to English when language is undefined or unsupported', () => {
+    expect(getRefusalReason('generic', undefined)).toBe('Model refused the request');
+    expect(getRefusalReason('generic', 'fr')).toBe('Model refused the request');
+    expect(getRefusalReason('harmful', 'ja')).toBe('The output contains a standard refusal.');
   });
 });

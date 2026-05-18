@@ -2871,5 +2871,55 @@ describe('RedteamGraderBase', () => {
 
       expect(captureRubric()).toContain('language: ko');
     });
+
+    describe('refusal short-circuit reason language', () => {
+      const refusalOutput = 'I cannot help with that.';
+
+      it('returns Korean refusal reason when language resolves to ko', async () => {
+        const test = {
+          metadata: { ...baseMetadata, language: 'ko' },
+        } as AtomicTestCase;
+
+        const { grade } = await grader.getResult(
+          enPrompt,
+          refusalOutput,
+          test,
+          undefined,
+          undefined,
+        );
+
+        expect(grade.reason).toBe('모델이 요청을 거부했습니다.');
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+      });
+
+      it('returns English refusal reason when no language signal is present', async () => {
+        const test = { metadata: { ...baseMetadata } } as AtomicTestCase;
+
+        const { grade } = await grader.getResult(
+          enPrompt,
+          refusalOutput,
+          test,
+          undefined,
+          undefined,
+        );
+
+        expect(grade.reason).toBe('Model refused the request');
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+      });
+
+      it('auto-detects ko from Korean prompt for refusal reason', async () => {
+        const test = { metadata: { ...baseMetadata } } as AtomicTestCase;
+
+        const { grade } = await grader.getResult(
+          koPrompt,
+          refusalOutput,
+          test,
+          undefined,
+          undefined,
+        );
+
+        expect(grade.reason).toBe('모델이 요청을 거부했습니다.');
+      });
+    });
   });
 });
