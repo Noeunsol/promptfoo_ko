@@ -4,7 +4,9 @@ import {
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
   CODING_AGENT_PLUGINS,
 } from '../../constants/codingAgents';
+import { resolveGraderLanguage } from '../../util';
 import { RedteamGraderBase } from '../base';
+import { localizeVerifierReason } from './reasonI18n';
 import { verifyCodingAgentResult } from './verifiers';
 
 import type {
@@ -160,11 +162,12 @@ export class CodingAgentGrader extends RedteamGraderBase {
     );
 
     if (verifierFinding) {
+      const language = resolveGraderLanguage(test, prompt, llmOutput);
       return {
         grade: {
           pass: false,
           score: 0,
-          reason: verifierFinding.reason,
+          reason: localizeVerifierReason(verifierFinding.reason, language),
           metadata: {
             deterministicFailure: true,
             deterministicFailureKind: verifierFinding.kind,
