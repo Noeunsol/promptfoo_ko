@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import {
+  CRESCENDO_SYSTEM_PROMPT,
+  EVAL_SYSTEM_PROMPT,
+  REFUSAL_SYSTEM_PROMPT,
+} from '../../../src/redteam/providers/crescendo/prompts';
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -192,6 +198,103 @@ describe('addCrescendo', () => {
 
       expect(storedResult.assertion).toBeUndefined();
       expect(storedResult.pass).toBe(false);
+    });
+  });
+});
+
+describe('Crescendo provider prompts — language branching', () => {
+  const nunjucks = getNunjucksEngine();
+  const baseCrescendoVars = {
+    conversationObjective: 'test conversation goal',
+    currentRound: 1,
+    maxTurns: 5,
+    successFlag: 0,
+    purpose: 'a friendly assistant',
+    inputs: '',
+  };
+  const baseScoringVars = { conversationObjective: 'test goal' };
+
+  describe('CRESCENDO_SYSTEM_PROMPT', () => {
+    it('renders Korean body when language=ko', () => {
+      const rendered = nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+        ...baseCrescendoVars,
+        language: 'ko',
+      });
+      expect(rendered).toMatch(/[가-힣]/);
+      expect(rendered).toContain('AI 안전성 연구자');
+      expect(rendered).not.toContain('You are a proficient AI safety researcher');
+    });
+
+    it('renders English body when language=en', () => {
+      const rendered = nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+        ...baseCrescendoVars,
+        language: 'en',
+      });
+      expect(rendered).toContain('You are a proficient AI safety researcher');
+      expect(rendered).not.toContain('AI 안전성 연구자');
+    });
+
+    it('renders English body when language is undefined (no regression)', () => {
+      const rendered = nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, baseCrescendoVars);
+      expect(rendered).toContain('You are a proficient AI safety researcher');
+      expect(rendered).not.toContain('AI 안전성 연구자');
+    });
+
+    it('preserves Nunjucks variable interpolation in both branches', () => {
+      const ko = nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+        ...baseCrescendoVars,
+        language: 'ko',
+      });
+      const en = nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
+        ...baseCrescendoVars,
+        language: 'en',
+      });
+      expect(ko).toContain('test conversation goal');
+      expect(en).toContain('test conversation goal');
+    });
+  });
+
+  describe('REFUSAL_SYSTEM_PROMPT', () => {
+    it('renders Korean body when language=ko', () => {
+      const rendered = nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
+        ...baseScoringVars,
+        language: 'ko',
+      });
+      expect(rendered).toMatch(/[가-힣]/);
+      expect(rendered).toContain('평가자');
+      expect(rendered).not.toContain('You are an evaluator with a focus on assessing');
+    });
+
+    it('renders English body when language=en or undefined', () => {
+      const en = nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
+        ...baseScoringVars,
+        language: 'en',
+      });
+      const noLang = nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, baseScoringVars);
+      expect(en).toContain('You are an evaluator with a focus on assessing');
+      expect(noLang).toContain('You are an evaluator with a focus on assessing');
+    });
+  });
+
+  describe('EVAL_SYSTEM_PROMPT', () => {
+    it('renders Korean body when language=ko', () => {
+      const rendered = nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
+        ...baseScoringVars,
+        language: 'ko',
+      });
+      expect(rendered).toMatch(/[가-힣]/);
+      expect(rendered).toContain('레드팀 엔지니어');
+      expect(rendered).not.toContain('You are a proficient red teaming engineer');
+    });
+
+    it('renders English body when language=en or undefined', () => {
+      const en = nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
+        ...baseScoringVars,
+        language: 'en',
+      });
+      const noLang = nunjucks.renderString(EVAL_SYSTEM_PROMPT, baseScoringVars);
+      expect(en).toContain('You are a proficient red teaming engineer');
+      expect(noLang).toContain('You are a proficient red teaming engineer');
     });
   });
 });

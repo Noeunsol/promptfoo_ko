@@ -38,6 +38,7 @@ import {
   extractPromptFromTags,
   getSessionId,
   isBasicRefusal,
+  resolveGraderLanguage,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -303,6 +304,10 @@ export class CrescendoProvider implements ApiProvider {
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
+    // Resolve language once for the duration of this attack. Priority chain:
+    // test.metadata.language -> metadata.modifiers.language -> detectLanguage(prompt) -> detectLanguage(output) -> undefined
+    const language = resolveGraderLanguage(test, String(vars[this.config.injectVar] ?? ''), '');
+
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
 
@@ -362,6 +367,7 @@ export class CrescendoProvider implements ApiProvider {
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
       inputs: buildPromptInputDescriptions(this.config.inputs),
+      language,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -403,6 +409,7 @@ export class CrescendoProvider implements ApiProvider {
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
           inputs: buildPromptInputDescriptions(this.config.inputs),
+          language,
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -543,6 +550,7 @@ export class CrescendoProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          language,
           options,
         );
         logger.debug(
@@ -707,7 +715,7 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, options);
+        const evalScore = await this.getEvalScore(lastResponse.output, language, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -1229,6 +1237,7 @@ export class CrescendoProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    language?: string,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
@@ -1237,7 +1246,12 @@ export class CrescendoProvider implements ApiProvider {
       logger.debug(
         '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
       );
-      return [true, 'The output contains a standard refusal.'];
+      return [
+        true,
+        language === 'ko'
+          ? '출력에 표준적인 거부 응답이 포함되어 있습니다.'
+          : 'The output contains a standard refusal.',
+      ];
     }
 
     // Otherwise, use the scoring chat to grade the refusal
@@ -1248,6 +1262,7 @@ export class CrescendoProvider implements ApiProvider {
 
     const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
+      language,
     });
 
     const refusalBody = JSON.stringify([
@@ -1297,7 +1312,11 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    language?: string,
+    options?: CallApiOptionsParams,
+  ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -1308,6 +1327,7 @@ export class CrescendoProvider implements ApiProvider {
 
     const evalSystemPrompt = this.nunjucks.renderString(EVAL_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
+      language,
     });
 
     const evalBody = JSON.stringify([
