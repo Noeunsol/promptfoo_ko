@@ -42,6 +42,7 @@ import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
   getSessionId,
+  resolveGraderLanguage,
 } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -146,6 +147,7 @@ export function renderSystemPrompts(
   purpose?: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   modifiers?: Record<string, string>,
+  language?: string,
 ): {
   redteamSystemPrompt: string;
   judgeSystemPrompt: string;
@@ -159,9 +161,19 @@ export function renderSystemPrompts(
 
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
-      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection })
-      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection }),
-    judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
+      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, {
+          goal,
+          purpose,
+          modifierSection,
+          language,
+        })
+      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
+          goal,
+          purpose,
+          modifierSection,
+          language,
+        }),
+    judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal, language }),
   };
 }
 
@@ -542,6 +554,7 @@ async function runRedteamConversation({
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
+  const language = resolveGraderLanguage(test, goal, '');
 
   // Store the original vars and transformVars config
   const originalVars = { ...vars };
@@ -568,6 +581,7 @@ async function runRedteamConversation({
     test?.metadata?.purpose,
     excludeTargetOutputFromAgenticAttackGeneration,
     test?.metadata?.modifiers,
+    language,
   );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [

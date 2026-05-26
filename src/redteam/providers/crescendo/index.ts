@@ -388,7 +388,7 @@ export class CrescendoProvider implements ApiProvider {
     let graderPassed: boolean | undefined;
 
     // Generate goal-specific evaluation rubric
-    const additionalRubric = getGoalRubric(this.userGoal);
+    const additionalRubric = getGoalRubric(this.userGoal, language);
     while (roundNum < this.maxTurns) {
       try {
         roundNum++;

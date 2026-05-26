@@ -32,7 +32,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, resolveGraderLanguage } from '../util';
 import {
   buildGraderResultAssertion,
   createIterationContext,
@@ -144,6 +144,7 @@ export async function runMetaAgentRedteam({
   const transformVarsConfig = test?.options?.transformVars;
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
+  const language = resolveGraderLanguage(test, String(goal ?? ''), '');
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
@@ -206,6 +207,7 @@ export async function runMetaAgentRedteam({
       testRunId,
       iteration: i + 1,
       goal,
+      language,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
       inputs,

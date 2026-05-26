@@ -31,7 +31,12 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  resolveGraderLanguage,
+} from '../util';
 import { getGoalRubric } from './prompts';
 import {
   buildGraderResultAssertion,
@@ -256,7 +261,8 @@ export default class GoatProvider implements ApiProvider {
 
     // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
-    const additionalRubric = getGoalRubric(userGoal);
+    const language = resolveGraderLanguage(context?.test, String(userGoal ?? ''), '');
+    const additionalRubric = getGoalRubric(userGoal, language);
     let stopReason: GoatMetadata['stopReason'] = 'Max turns reached';
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
@@ -341,6 +347,7 @@ export default class GoatProvider implements ApiProvider {
         if (this.config.excludeTargetOutputFromAgenticAttackGeneration && turn > 0) {
           body = JSON.stringify({
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
+            language,
             targetOutput: previousTargetOutput,
             attackAttempt: previousAttackerMessage,
             task: 'extract-goat-failure',
@@ -371,6 +378,7 @@ export default class GoatProvider implements ApiProvider {
 
         body = JSON.stringify({
           goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
+          language,
           i: turn,
           messages: this.config.excludeTargetOutputFromAgenticAttackGeneration
             ? messages.filter((m) => m.role !== 'assistant')

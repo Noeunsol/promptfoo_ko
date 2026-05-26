@@ -37,6 +37,7 @@ import {
   extractPromptFromTags,
   getSessionId,
   isBasicRefusal,
+  resolveGraderLanguage,
 } from '../../util';
 import {
   buildGraderResultAssertion,
@@ -263,6 +264,7 @@ export class HydraProvider implements ApiProvider {
     const shouldFetchTrace =
       tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
+    const language = resolveGraderLanguage(test, goal, '');
 
     logger.debug('[Hydra] Starting attack', {
       goal,
@@ -344,6 +346,7 @@ export class HydraProvider implements ApiProvider {
         scanId,
         turn,
         goal,
+        language,
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,

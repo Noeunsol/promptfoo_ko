@@ -33,7 +33,12 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  resolveGraderLanguage,
+} from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -156,6 +161,7 @@ export async function runRedteamConversation({
   const transformVarsConfig = test?.options?.transformVars;
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
+  const language = resolveGraderLanguage(test, String(goal ?? ''), '');
 
   // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeGoalRubric(goal);
@@ -173,15 +179,17 @@ export async function runRedteamConversation({
         purpose: test?.metadata?.purpose,
         modifierSection,
         inputs: buildPromptInputDescriptions(inputs),
+        language,
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
         inputs: buildPromptInputDescriptions(inputs),
+        language,
       });
 
-  const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
+  const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal, language });
 
   const redteamHistory: {
     role: 'user' | 'assistant' | 'system';
