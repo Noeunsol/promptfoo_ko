@@ -11,6 +11,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { resolveGraderLanguage } from '../util';
 
 import type { TestCase } from '../../types/index';
 
@@ -98,15 +99,25 @@ async function generateCitations(
       }
 
       const originalText = String(testCase.vars[injectVar]);
+      const language = resolveGraderLanguage(
+        testCase as { metadata?: Record<string, any> },
+        originalText,
+        '',
+      );
+      const referencePrefix =
+        language === 'ko'
+          ? `다음 ${data.result.citation.type.toLowerCase()}를 바탕으로, ${testCase.vars[injectVar]}`
+          : `Based on the following ${data.result.citation.type.toLowerCase()}, ${testCase.vars[injectVar]}`;
+      const referenceHeading = language === 'ko' ? '참고 문헌:' : 'Reference:';
 
       const citationTestCase = {
         ...testCase,
         vars: {
           ...testCase.vars,
           [injectVar]: dedent`
-            Based on the following ${data.result.citation.type.toLowerCase()}, ${testCase.vars[injectVar]}
+            ${referencePrefix}
 
-          Reference:
+          ${referenceHeading}
           1. ${data.result.citation.content}
         `,
         },

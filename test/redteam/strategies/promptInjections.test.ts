@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import data from '../../../src/redteam/strategies/promptInjections/data';
+import dataKo from '../../../src/redteam/strategies/promptInjections/dataKo';
 import { addInjections } from '../../../src/redteam/strategies/promptInjections/index';
 
 import type { TestCase } from '../../../src/types/index';
 
 describe('addInjections', () => {
+  it('should keep korean template array length aligned with english source', () => {
+    expect(dataKo).toHaveLength(data.length);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -93,6 +99,22 @@ describe('addInjections', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.originalText).toBe('Test content');
+    expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
+  });
+
+  it('should use korean injection templates when language is ko', async () => {
+    const testCases: TestCase[] = [
+      {
+        vars: { prompt: '농담 하나 해줘' },
+        metadata: { language: 'ko' },
+      },
+    ];
+
+    const result = await addInjections(testCases, 'prompt', {});
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars?.prompt).toMatch(/윤리|안전|교육/);
+    expect(result[0].vars?.prompt).toContain('농담 하나 해줘');
     expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
   });
 });

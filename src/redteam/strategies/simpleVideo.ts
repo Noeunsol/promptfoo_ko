@@ -48,7 +48,7 @@ async function getSystemFont(): Promise<string> {
 
 let ffmpegAvailable = false;
 
-async function checkFfmpegAvailable(): Promise<void> {
+async function checkFfmpegAvailable(language: string = 'en'): Promise<void> {
   if (ffmpegAvailable) {
     return;
   }
@@ -58,11 +58,17 @@ async function checkFfmpegAvailable(): Promise<void> {
     ffmpegAvailable = true;
   } catch (error) {
     throw new Error(
-      'To use the video strategy, FFmpeg must be installed on your system:\n' +
-        '- macOS: brew install ffmpeg\n' +
-        '- Ubuntu/Debian: apt-get install ffmpeg\n' +
-        '- Windows: Download from ffmpeg.org\n' +
-        `Error: ${error}`,
+      language === 'ko'
+        ? '비디오 전략을 사용하려면 시스템에 FFmpeg가 설치되어 있어야 합니다:\n' +
+            '- macOS: brew install ffmpeg\n' +
+            '- Ubuntu/Debian: apt-get install ffmpeg\n' +
+            '- Windows: ffmpeg.org에서 다운로드\n' +
+            `오류: ${error}`
+        : 'To use the video strategy, FFmpeg must be installed on your system:\n' +
+            '- macOS: brew install ffmpeg\n' +
+            '- Ubuntu/Debian: apt-get install ffmpeg\n' +
+            '- Windows: Download from ffmpeg.org\n' +
+            `Error: ${error}`,
     );
   }
 }
@@ -107,10 +113,10 @@ export function getFallbackBase64(text: string): string {
   return Buffer.from(text).toString('base64');
 }
 
-async function textToVideo(text: string): Promise<string> {
+async function textToVideo(text: string, language: string = 'en'): Promise<string> {
   try {
     if (neverGenerateRemote()) {
-      await checkFfmpegAvailable();
+      await checkFfmpegAvailable(language);
       const { outputPath, cleanup } = await createTempVideoEnvironment();
 
       try {
@@ -141,7 +147,9 @@ async function textToVideo(text: string): Promise<string> {
       }
     } else {
       throw new Error(
-        'Local video generation requires FFmpeg to be installed. Future versions may support remote generation.',
+        language === 'ko'
+          ? '로컬 비디오 생성에는 FFmpeg 설치가 필요합니다. 향후 버전에서 원격 생성을 지원할 수 있습니다.'
+          : 'Local video generation requires FFmpeg to be installed. Future versions may support remote generation.',
       );
     }
   } catch (error) {
@@ -204,7 +212,7 @@ export function createProgressBar(total: number): {
 export async function addVideoToBase64(
   testCases: TestCase[],
   injectVar: string,
-  videoGenerator: (text: string) => Promise<string> = textToVideo,
+  videoGenerator: (text: string, language?: string) => Promise<string> = textToVideo,
 ): Promise<TestCase[]> {
   const videoTestCases: TestCase[] = [];
   const progress = createProgressBar(testCases.length);
@@ -218,7 +226,9 @@ export async function addVideoToBase64(
         );
 
         const originalText = String(testCase.vars[injectVar]);
-        const base64Video = await videoGenerator(originalText);
+        const language =
+          testCase.metadata?.language || testCase.metadata?.modifiers?.language || 'en';
+        const base64Video = await videoGenerator(originalText, language);
 
         videoTestCases.push({
           ...testCase,

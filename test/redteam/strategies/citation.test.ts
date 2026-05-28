@@ -222,4 +222,38 @@ describe('citation strategy', () => {
 
     expect(result[0]?.metadata?.originalText).toBe('original prompt');
   });
+
+  it('should localize citation prompt in korean when language is ko', async () => {
+    const koreanTestCases: TestCase[] = [
+      {
+        vars: {
+          prompt: '원문 프롬프트',
+        },
+        metadata: {
+          language: 'ko',
+        },
+      },
+    ];
+
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          key: 'test key',
+          citation: {
+            type: 'Report',
+            content: '보고서 인용 내용',
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addCitationTestCases(koreanTestCases, 'prompt', {});
+
+    expect(result[0]?.vars?.prompt).toContain('다음 report를 바탕으로');
+    expect(result[0]?.vars?.prompt).toContain('참고 문헌:');
+  });
 });

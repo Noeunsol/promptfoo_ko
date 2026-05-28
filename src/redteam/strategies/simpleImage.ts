@@ -120,7 +120,7 @@ export interface TextToImageResult {
  */
 async function textToImage(
   text: string,
-  options?: { evalId?: string; storeToStorage?: boolean },
+  options?: { evalId?: string; storeToStorage?: boolean; language?: string },
 ): Promise<TextToImageResult> {
   // Special case for test environment - avoids actually loading Sharp
   if (getEnvString('NODE_ENV') === 'test' || getEnvString('JEST_WORKER_ID')) {
@@ -161,7 +161,11 @@ async function textToImage(
     const sharpModule = await importSharp();
 
     if (!sharpModule) {
-      throw new Error(`Please install sharp to use image-based strategies: npm install sharp`);
+      throw new Error(
+        options?.language === 'ko'
+          ? '이미지 기반 전략을 사용하려면 sharp를 설치하세요: npm install sharp'
+          : 'Please install sharp to use image-based strategies: npm install sharp',
+      );
     }
 
     // Convert SVG to PNG using sharp
@@ -227,9 +231,14 @@ export async function addImageToBase64(
     );
 
     const originalText = String(testCase.vars[injectVar]);
+    const language =
+      testCase.metadata?.language ||
+      testCase.metadata?.modifiers?.language ||
+      config.language ||
+      'en';
 
     // Convert text to image and then to base64
-    const imageResult = await textToImage(originalText, { evalId });
+    const imageResult = await textToImage(originalText, { evalId, language });
 
     imageTestCases.push({
       ...testCase,

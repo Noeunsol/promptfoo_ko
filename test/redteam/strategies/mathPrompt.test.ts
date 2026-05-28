@@ -106,6 +106,25 @@ describe('mathPrompt', () => {
         'Expected a JSON object',
       );
     });
+
+    it('should use korean localization when language is ko', async () => {
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: '수학 인코딩 프롬프트' }),
+        }),
+      });
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+
+      const result = await encodeMathPrompt('테스트 텍스트', '집합론', 'ko');
+
+      expect(result).toContain('수학 인코딩 프롬프트');
+      expect(result).toContain('또한 본문 증명과 별도로');
+      expect(mockProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('아래 예시 스타일을 참고해'),
+      );
+    });
   });
 
   describe('addMathPrompt', () => {
