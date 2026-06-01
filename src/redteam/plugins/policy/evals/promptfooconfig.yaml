@@ -10,7 +10,7 @@ providers:
 defaultTest:
   options:
     provider:
-      text: openai:gpt-5-mini
+      text: openai:gpt-4o-mini
     rubricPrompt:
       - role: system
         content: |
