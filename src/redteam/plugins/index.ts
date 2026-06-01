@@ -69,7 +69,10 @@ import { SqlInjectionPlugin } from './sqlInjection';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
 import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent';
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
-import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
+import {
+  TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES,
+  TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES_KO,
+} from './teenSafety/graderExamples';
 import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
 import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
@@ -125,7 +128,11 @@ function applyDefaultGraderExamples(
   key: string,
   config: PluginConfig | undefined,
 ): PluginConfig | undefined {
-  const defaultGraderExamples = TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES[key];
+  const defaultExamplesByLanguage =
+    config?.language === 'ko'
+      ? TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES_KO
+      : TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES;
+  const defaultGraderExamples = defaultExamplesByLanguage[key];
 
   if (!defaultGraderExamples?.length) {
     return config;
