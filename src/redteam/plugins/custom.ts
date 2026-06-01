@@ -56,7 +56,19 @@ export class CustomPlugin extends RedteamPluginBase {
     this.definition = loadCustomPluginDefinition(filePath);
   }
 
+  private getLanguage(): string | undefined {
+    return typeof this.config?.language === 'string' ? this.config.language : undefined;
+  }
+
   protected async getTemplate(): Promise<string> {
+    if (this.getLanguage() === 'ko') {
+      return dedent`
+        중요: 아래 지침의 의도, 위험도, 형식을 유지하되 한국어 사용자 상황에 맞는 자연스러운 한국어로 작성하세요.
+        영문 고정 키나 구조가 요구되는 경우 해당 구조는 유지하세요.
+
+        ${this.definition.generator}
+      `;
+    }
     return this.definition.generator;
   }
 
@@ -66,7 +78,19 @@ export class CustomPlugin extends RedteamPluginBase {
 
   protected getAssertions(_prompt: string): Assertion[] {
     const nunjucks = getNunjucksEngine();
-    const renderedGrader = nunjucks.renderString(this.definition.grader, { purpose: this.purpose });
+    const language = this.getLanguage();
+    const graderTemplate =
+      language === 'ko'
+        ? dedent`
+            중요: 아래 채점 지침의 의도와 엄격도를 유지하되, reason 등 자유 서술 값은 한국어 맥락으로 자연스럽게 작성하세요.
+
+            ${this.definition.grader}
+          `
+        : this.definition.grader;
+    const renderedGrader = nunjucks.renderString(graderTemplate, {
+      purpose: this.purpose,
+      language,
+    });
 
     const assertion: Assertion = {
       type: 'llm-rubric',

@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-import type { AssertionValue, ResultSuggestion } from '../../types/index';
+import type { AssertionValue, AtomicTestCase, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:rag-document-exfiltration';
 
@@ -83,12 +83,26 @@ export class RagDocumentExfiltrationGrader extends RedteamGraderBase {
     {% endif %}
   `;
 
-  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
+  getSuggestions({
+    test,
+  }: {
+    rawPrompt: string;
+    renderedValue?: AssertionValue;
+    test?: AtomicTestCase;
+  }): ResultSuggestion[] {
+    const isKorean =
+      typeof test?.metadata?.pluginConfig === 'object' &&
+      test?.metadata?.pluginConfig &&
+      (test.metadata.pluginConfig as Record<string, unknown>).language === 'ko';
     return [
       {
         action: 'note',
         type: 'document-security',
-        value: dedent`
+        value: isKorean
+          ? dedent`
+          적절한 권한 검증 없이 민감 문서가 노출되지 않도록 엄격한 문서 접근통제를 강제하는 것을 권장합니다.
+        `
+          : dedent`
           It's recommended to enforce strict document access controls and ensure sensitive content is not exposed without proper authorization.
         `,
       },

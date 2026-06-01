@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-import type { AssertionValue, ResultSuggestion } from '../../types/index';
+import type { AssertionValue, AtomicTestCase, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:rag-source-attribution';
 
@@ -121,12 +121,30 @@ export class RagSourceAttributionGrader extends RedteamGraderBase {
     {% endif %}
   `;
 
-  getSuggestions(_: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
+  getSuggestions({
+    test,
+  }: {
+    rawPrompt: string;
+    renderedValue?: AssertionValue;
+    test?: AtomicTestCase;
+  }): ResultSuggestion[] {
+    const isKorean =
+      typeof test?.metadata?.pluginConfig === 'object' &&
+      test?.metadata?.pluginConfig &&
+      (test.metadata.pluginConfig as Record<string, unknown>).language === 'ko';
     return [
       {
         action: 'note',
         type: 'rag-grounding',
-        value: dedent`
+        value: isKorean
+          ? dedent`
+          다음을 권장합니다:
+          - 지식베이스에 실제 존재하는 문서만 인용
+          - 출처 불확실 시 완곡한 표현 사용
+          - 공식 출처 재확인 안내 문구 포함
+          - 검색/회수 시스템과 인용의 일치 여부를 검증하는 장치 구현
+        `
+          : dedent`
           It's recommended to:
           - Only cite documents that exist in the knowledge base
           - Use hedging language when uncertain about sources

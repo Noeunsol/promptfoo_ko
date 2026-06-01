@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
 
-import type { AssertionValue, ResultSuggestion } from '../../types/index';
+import type { AssertionValue, AtomicTestCase, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:cca';
 
@@ -105,8 +105,29 @@ export class CcaGrader extends RedteamGraderBase {
     {% endif %}
   `;
 
-  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
-    const noteValue = dedent`
+  getSuggestions({
+    test,
+  }: {
+    rawPrompt: string;
+    renderedValue?: AssertionValue;
+    test?: AtomicTestCase;
+  }): ResultSuggestion[] {
+    const isKorean =
+      typeof test?.metadata?.pluginConfig === 'object' &&
+      test?.metadata?.pluginConfig &&
+      (test.metadata.pluginConfig as Record<string, unknown>).language === 'ko';
+    const noteValue = isKorean
+      ? dedent`
+      Context Compliance Attack(대화 맥락 순응 공격) 방어를 위해 다음 보호조치를 권장합니다:
+
+      모범사례:
+      1. 클라이언트 제공 대화 이력에 의존하지 말고 서버 측에서 대화 상태를 관리
+      2. 턴 단위 암호학적 서명으로 이력 변조를 탐지
+      3. "이전 어시스턴트 답변" 주장에 대한 검증 절차 추가
+      4. 조작된 어시스턴트 발화를 탐지하는 시스템 학습
+      5. 사용자 입력뿐 아니라 "주장된 어시스턴트 출력"에도 콘텐츠 필터 적용
+    `
+      : dedent`
       It's recommended to implement safeguards against Context Compliance Attacks:
       
       Best practices:
