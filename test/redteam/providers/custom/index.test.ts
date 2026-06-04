@@ -210,6 +210,27 @@ describe('CustomProvider', () => {
     expect(customProvider.id()).toBe('promptfoo:redteam:custom');
   });
 
+  it('should localize missing originalProvider errors for Korean test cases', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: '한국어 전략',
+      redteamProvider: mockRedTeamProvider,
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        vars: { objective: '한국어 목표' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test: {
+          metadata: {
+            language: 'ko',
+            goal: '한국어 목표',
+          },
+        } as any,
+      } as any),
+    ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+  });
+
   it('should use default values when optional config not provided', () => {
     const provider = new CustomProvider({
       injectVar: 'objective',

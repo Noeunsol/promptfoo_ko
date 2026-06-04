@@ -183,6 +183,20 @@ describe('addRetryTestCases', () => {
     );
   });
 
+  it('should throw a Korean error when no targetIds are provided for Korean inputs', async () => {
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { prompt: '한국어 재시도 테스트' },
+        assert: [],
+        metadata: { pluginId: 'bias:age', language: 'ko' },
+      },
+    ];
+
+    await expect(addRetryTestCases(testCases, 'prompt', {})).rejects.toThrow(
+      'config에서 targetIds를 찾을 수 없습니다.',
+    );
+  });
+
   it('should return empty array when no failed tests found', async () => {
     const mockDb = {
       select: vi.fn().mockReturnThis(),

@@ -24,6 +24,10 @@ export interface TextToAudioResult {
   storageKey?: string;
 }
 
+function isKoreanLanguage(language: string | undefined): boolean {
+  return language === 'ko';
+}
+
 /**
  * Converts text to audio using the remote API
  * @throws Error if remote generation is disabled or if the API call fails
@@ -33,9 +37,14 @@ export async function textToAudio(
   language: string = 'en',
   options?: { evalId?: string; storeToStorage?: boolean },
 ): Promise<TextToAudioResult> {
+  const isKorean = isKoreanLanguage(language);
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
-    throw new Error(getRemoteGenerationExplicitlyDisabledError('Audio strategy'));
+    throw new Error(
+      isKorean
+        ? '오디오 전략은 원격 생성 기능이 필요하지만 현재 명시적으로 비활성화되어 있습니다.'
+        : getRemoteGenerationExplicitlyDisabledError('Audio strategy'),
+    );
   }
 
   try {
@@ -66,7 +75,9 @@ export async function textToAudio(
 
     if (data.error || !data.audioBase64) {
       throw new Error(
-        `Error in remote audio generation: ${data.error || 'No audio data returned'}`,
+        isKorean
+          ? `원격 오디오 생성 오류: ${data.error || '오디오 데이터가 반환되지 않았습니다'}`
+          : `Error in remote audio generation: ${data.error || 'No audio data returned'}`,
       );
     }
 
@@ -98,7 +109,9 @@ export async function textToAudio(
   } catch (error) {
     logger.error(`Error generating audio from text: ${error}`);
     throw new Error(
-      `Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`,
+      isKorean
+        ? `오디오 생성에 실패했습니다: ${error instanceof Error ? error.message : String(error)}. 이 전략을 사용하려면 인터넷 연결과 원격 API 접근이 필요합니다.`
+        : `Failed to generate audio: ${error instanceof Error ? error.message : String(error)}. This strategy requires an active internet connection and access to the remote API.`,
     );
   }
 }
@@ -114,12 +127,20 @@ export async function addAudioToBase64(
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
   const evalId = config.evalId;
+  const defaultLanguage =
+    testCases[0]?.metadata?.language ||
+    testCases[0]?.metadata?.modifiers?.language ||
+    config.language ||
+    'en';
+  const isKorean = isKoreanLanguage(defaultLanguage);
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
     progressBar = new SingleBar(
       {
-        format: 'Converting to Audio {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
+        format: isKorean
+          ? '오디오로 변환 중 {bar} {percentage}% | ETA: {eta}s | {value}/{total}'
+          : 'Converting to Audio {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -131,7 +152,9 @@ export async function addAudioToBase64(
   for (const testCase of testCases) {
     invariant(
       testCase.vars,
-      `Audio encoding: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+      isKorean
+        ? `오디오 인코딩: testCase.vars가 필요하지만 ${JSON.stringify(testCase)}를 받았습니다`
+        : `Audio encoding: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
     );
 
     const originalText = String(testCase.vars[injectVar]);

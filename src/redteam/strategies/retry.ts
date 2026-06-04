@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
+import { resolveGraderLanguage } from '../util';
 
 import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
 
@@ -17,6 +18,12 @@ const SINGLE_TURN_STRATEGIES = AGENTIC_STRATEGIES.filter(
 
 function isSingleTurnStrategy(strategyId: string | undefined): boolean {
   return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
+}
+
+function resolveRetryLanguage(testCases: TestCaseWithPlugin[]): string {
+  const firstTestCase = testCases[0];
+  const prompt = String(firstTestCase?.vars?.prompt ?? '');
+  return resolveGraderLanguage(firstTestCase, prompt, '');
 }
 
 /**
@@ -186,6 +193,8 @@ export async function addRetryTestCases(
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
+  const language = resolveRetryLanguage(testCases);
+  const isKorean = language === 'ko';
   // Group test cases by plugin ID
   const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
   for (const test of testCases) {
@@ -204,7 +213,9 @@ export async function addRetryTestCases(
 
   invariant(
     targetIds.length > 0 && targetIds.every((id) => typeof id === 'string'),
-    'No target IDs found in config. The retry strategy requires at least one target ID to be specified.',
+    isKorean
+      ? 'config에서 targetIds를 찾을 수 없습니다. retry 전략을 사용하려면 최소 1개의 target ID를 지정해야 합니다.'
+      : 'No target IDs found in config. The retry strategy requires at least one target ID to be specified.',
   );
 
   // For each plugin, get its failed test cases

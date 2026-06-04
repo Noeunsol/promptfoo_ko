@@ -98,6 +98,25 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     );
   });
 
+  it('should localize missing originalProvider errors for Korean inputs', async () => {
+    const provider = new AuthoritativeMarkupInjectionProvider({
+      injectVar: 'input',
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        vars: { input: '한국어 입력' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          metadata: {
+            language: 'ko',
+            goal: '한국어 입력',
+          },
+        } as any,
+      } as any),
+    ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+  });
+
   describe('Token Usage Tracking', () => {
     it('should accumulate token usage from target provider', async () => {
       mockTargetProvider.callApi.mockResolvedValue({

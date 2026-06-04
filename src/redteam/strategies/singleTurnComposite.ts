@@ -10,6 +10,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { resolveGraderLanguage } from '../util';
 
 import type { TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
@@ -23,12 +24,19 @@ async function generateCompositePrompts(
   try {
     const concurrency = 10;
     let allResults: TestCase[] = [];
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    const isKorean = language === 'ko';
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
-          format:
-            'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
+          format: isKorean
+            ? 'Composite 탈옥 생성 {bar} {percentage}% | ETA: {eta}s | {value}/{total}개 케이스'
+            : 'Composite Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
           gracefulExit: true,
         },
@@ -41,7 +49,9 @@ async function generateCompositePrompts(
       logger.debug(`[Composite] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
-        `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+        isKorean
+          ? `Composite: testCase.vars가 필요하지만 ${JSON.stringify(testCase)}를 받았습니다`
+          : `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
       // Get inputs schema from plugin config for multi-input mode
@@ -92,7 +102,11 @@ async function generateCompositePrompts(
         )}`,
       );
       if (data.error || !data.modifiedPrompts) {
-        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.error(
+          isKorean
+            ? `[jailbreak:composite] Composite 생성 중 오류: ${data.error}}`
+            : `[jailbreak:composite] Error in composite generation: ${data.error}}`,
+        );
         logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
         return;
       }
@@ -135,7 +149,16 @@ async function generateCompositePrompts(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in composite generation: ${error}`);
+    logger.error(
+      testCases[0] &&
+        resolveGraderLanguage(
+          testCases[0] as { metadata?: Record<string, any> },
+          String(testCases[0]?.vars?.[injectVar] ?? ''),
+          '',
+        ) === 'ko'
+        ? `Composite 생성 중 오류: ${error}`
+        : `Error in composite generation: ${error}`,
+    );
     return [];
   }
 }
@@ -151,7 +174,16 @@ export async function addCompositeTestCases(
 
   const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);
   if (compositeTestCases.length === 0) {
-    logger.warn('No composite  jailbreak test cases were generated');
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    logger.warn(
+      language === 'ko'
+        ? '생성된 Composite 탈옥 테스트 케이스가 없습니다'
+        : 'No composite  jailbreak test cases were generated',
+    );
   }
 
   return compositeTestCases;

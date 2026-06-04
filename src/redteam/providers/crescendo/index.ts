@@ -263,8 +263,21 @@ export class CrescendoProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<CrescendoResponse> {
     logger.debug('[Crescendo] callApi context', { context });
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
+    const language = resolveGraderLanguage(
+      context?.test,
+      String(context?.vars?.[this.config.injectVar] ?? ''),
+      '',
+    );
+    invariant(
+      context?.originalProvider,
+      language === 'ko'
+        ? 'originalProvider가 설정되어 있어야 합니다'
+        : 'Expected originalProvider to be set',
+    );
+    invariant(
+      context?.vars,
+      language === 'ko' ? 'vars가 설정되어 있어야 합니다' : 'Expected vars to be set',
+    );
 
     logger.debug(`[Crescendo] callApi invoked with prompt: ${prompt}`);
 
@@ -459,6 +472,7 @@ export class CrescendoProvider implements ApiProvider {
           shouldFetchTrace,
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
+          language,
         );
         lastResponse = response;
         lastTransformResult = transformResult;
@@ -523,6 +537,8 @@ export class CrescendoProvider implements ApiProvider {
             tracingOptions,
             shouldFetchTrace,
             traceSnapshots,
+            undefined,
+            language,
           );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
@@ -965,6 +981,7 @@ export class CrescendoProvider implements ApiProvider {
       CrescendoAttackPromptResponse,
       'inputMaterialization' | 'materializationHandled' | 'materializedVars'
     >,
+    language?: string,
   ): Promise<{
     response: TargetResponse;
     transformResult?: TransformResult;
@@ -991,7 +1008,11 @@ export class CrescendoProvider implements ApiProvider {
       !currentInputVars &&
       !remoteMaterialization?.materializedVars
     ) {
-      throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
+      throw new Error(
+        language === 'ko'
+          ? 'Crescendo 원격 다중 입력 생성이 잘못된 프롬프트 형식을 반환했습니다'
+          : 'Crescendo remote multi-input generation returned an invalid prompt format',
+      );
     }
     if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
       if (shouldGenerateRemote()) {

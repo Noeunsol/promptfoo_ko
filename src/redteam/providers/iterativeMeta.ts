@@ -378,9 +378,13 @@ export async function runMetaAgentRedteam({
       | undefined;
     if (inputs && shouldGenerateRemote() && !currentInputVars && !agentResp.materializedVars) {
       failClosedError =
-        'Iterative Meta remote multi-input generation returned an invalid prompt format';
+        language === 'ko'
+          ? 'Iterative Meta 원격 다중 입력 생성이 잘못된 프롬프트 형식을 반환했습니다'
+          : 'Iterative Meta remote multi-input generation returned an invalid prompt format';
       logger.warn(
-        '[IterativeMeta] Remote multi-input generation returned an invalid prompt format',
+        language === 'ko'
+          ? '[IterativeMeta] 원격 다중 입력 생성이 잘못된 프롬프트 형식을 반환했습니다'
+          : '[IterativeMeta] Remote multi-input generation returned an invalid prompt format',
         {
           iteration: i + 1,
           attackPromptPreview: attackPrompt.slice(0, 200),
@@ -757,8 +761,21 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     logger.debug('[IterativeMeta] callApi context', {
       hasContext: !!context,
     });
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context.vars, 'Expected vars to be set');
+    const language = resolveGraderLanguage(
+      context?.test,
+      String(context?.vars?.[this.injectVar] ?? ''),
+      '',
+    );
+    invariant(
+      context?.originalProvider,
+      language === 'ko'
+        ? 'originalProvider가 설정되어 있어야 합니다'
+        : 'Expected originalProvider to be set',
+    );
+    invariant(
+      context.vars,
+      language === 'ko' ? 'vars가 설정되어 있어야 합니다' : 'Expected vars to be set',
+    );
 
     return runMetaAgentRedteam({
       prompt: context.prompt,

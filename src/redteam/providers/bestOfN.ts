@@ -14,7 +14,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { getSessionId } from '../util';
+import { getSessionId, resolveGraderLanguage } from '../util';
 
 import type {
   ApiProvider,
@@ -33,6 +33,14 @@ interface BestOfNConfig {
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
+}
+
+function resolveBestOfNLanguage(
+  context: CallApiContextParams | undefined,
+  injectVar: string,
+): string {
+  const prompt = String(context?.vars?.[injectVar] ?? '');
+  return resolveGraderLanguage(context?.test, prompt, '');
 }
 
 export default class BestOfNProvider implements ApiProvider {
@@ -69,9 +77,18 @@ export default class BestOfNProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     logger.debug('[Best-of-N] callApi context', { context });
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
-
+    const language = resolveBestOfNLanguage(context, this.config.injectVar);
+    const isKorean = language === 'ko';
+    invariant(
+      context?.originalProvider,
+      isKorean
+        ? 'originalProvider가 설정되어 있어야 합니다'
+        : 'Expected originalProvider to be set',
+    );
+    invariant(
+      context?.vars,
+      isKorean ? 'vars가 설정되어 있어야 합니다' : 'Expected vars to be set',
+    );
     const targetProvider: ApiProvider = context.originalProvider;
     const targetTokenUsage = createEmptyTokenUsage();
     const sessionIds: string[] = [];
@@ -97,11 +114,17 @@ export default class BestOfNProvider implements ApiProvider {
       );
 
       const data = (await response.json()) as BestOfNResponse;
-      invariant(Array.isArray(data.modifiedPrompts), 'Expected modifiedPrompts array in response');
+      if (!Array.isArray(data.modifiedPrompts)) {
+        throw new Error(
+          isKorean
+            ? '원격 응답에 modifiedPrompts 배열이 있어야 합니다.'
+            : 'Expected modifiedPrompts array in response',
+        );
+      }
 
       logger.debug(
         dedent`
-          ${chalk.bold.green('Best-of-N candidates:')}
+          ${chalk.bold.green(isKorean ? 'Best-of-N 후보 프롬프트:' : 'Best-of-N candidates:')}
           ${chalk.cyan(JSON.stringify(data.modifiedPrompts, null, 2))}
         `,
       );
@@ -120,12 +143,17 @@ export default class BestOfNProvider implements ApiProvider {
           }
 
           if (typeof candidatePrompt !== 'string') {
-            logger.warn('[Best-of-N] Skipping non-string candidate prompt from remote generation', {
-              component: 'Best-of-N',
-              event: 'SkippingCandidatePrompt',
-              reason: 'non-string',
-              candidatePromptType: typeof candidatePrompt,
-            });
+            logger.warn(
+              isKorean
+                ? '[Best-of-N] 원격 생성 결과의 비문자열 후보 프롬프트를 건너뜁니다'
+                : '[Best-of-N] Skipping non-string candidate prompt from remote generation',
+              {
+                component: 'Best-of-N',
+                event: 'SkippingCandidatePrompt',
+                reason: 'non-string',
+                candidatePromptType: typeof candidatePrompt,
+              },
+            );
             return;
           }
 
@@ -135,7 +163,9 @@ export default class BestOfNProvider implements ApiProvider {
           if (unsafeCandidateScheme) {
             const schemeLabel = unsafeCandidateScheme.startsWith('file') ? 'file://' : 'package:';
             logger.warn(
-              `[Best-of-N] Skipping unsafe ${schemeLabel} candidate prompt from remote generation`,
+              isKorean
+                ? `[Best-of-N] 원격 생성 결과의 위험한 ${schemeLabel} 후보 프롬프트를 건너뜁니다`
+                : `[Best-of-N] Skipping unsafe ${schemeLabel} candidate prompt from remote generation`,
               {
                 component: 'Best-of-N',
                 event: 'SkippingCandidatePrompt',
@@ -182,8 +212,19 @@ export default class BestOfNProvider implements ApiProvider {
               return false; // Stop processing more candidates
             }
           } catch (err) {
-            logger.debug(`[Best-of-N] Candidate failed: ${err}`);
-            lastResponse = { error: String(err) };
+            logger.debug(
+              isKorean
+                ? `[Best-of-N] 후보 프롬프트 실행이 실패했습니다: ${err}`
+                : `[Best-of-N] Candidate failed: ${err}`,
+            );
+            lastResponse = {
+              error:
+                err instanceof Error
+                  ? err.message
+                  : isKorean
+                    ? '후보 프롬프트 실행 중 오류가 발생했습니다.'
+                    : String(err),
+            };
             currentStep++;
           }
         },
@@ -202,7 +243,7 @@ export default class BestOfNProvider implements ApiProvider {
       }
       return (
         lastResponse || {
-          error: 'All candidates failed',
+          error: isKorean ? '모든 후보 프롬프트가 실패했습니다.' : 'All candidates failed',
           metadata: {
             sessionIds,
           },
@@ -213,7 +254,7 @@ export default class BestOfNProvider implements ApiProvider {
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
       }
-      logger.error(`[Best-of-N] Error: ${err}`);
+      logger.error(isKorean ? `[Best-of-N] 오류: ${err}` : `[Best-of-N] Error: ${err}`);
       return {
         error: String(err),
         metadata: {

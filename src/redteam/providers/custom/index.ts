@@ -309,8 +309,21 @@ export class CustomProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<CustomResponse> {
     logger.debug('[Custom] callApi context', { context });
-    invariant(context?.originalProvider, 'Expected originalProvider to be set');
-    invariant(context?.vars, 'Expected vars to be set');
+    const language = resolveGraderLanguage(
+      context?.test,
+      String(context?.vars?.[this.config.injectVar] ?? ''),
+      '',
+    );
+    invariant(
+      context?.originalProvider,
+      language === 'ko'
+        ? 'originalProvider가 설정되어 있어야 합니다'
+        : 'Expected originalProvider to be set',
+    );
+    invariant(
+      context?.vars,
+      language === 'ko' ? 'vars가 설정되어 있어야 합니다' : 'Expected vars to be set',
+    );
 
     logger.debug(`[Custom] callApi invoked with prompt: ${prompt}`);
 

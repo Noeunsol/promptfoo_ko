@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
+import RedteamIterativeTreeProvider, {
   createTreeNode,
   evaluateResponse,
   getNewPrompt,
@@ -43,6 +43,25 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 describe('RedteamIterativeProvider', () => {
+  describe('provider localization', () => {
+    it('should localize missing originalProvider errors for Korean test cases', async () => {
+      const provider = new RedteamIterativeTreeProvider({ injectVar: 'goal' });
+
+      await expect(
+        provider.callApi('test', {
+          vars: { goal: '한국어 목표' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+          test: {
+            metadata: {
+              language: 'ko',
+              goal: '한국어 목표',
+            },
+          } as any,
+        }),
+      ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+    });
+  });
+
   describe('renderSystemPrompts', () => {
     it('should render system prompts correctly with default settings', () => {
       const goal = '{{goal}}';
@@ -64,6 +83,18 @@ describe('RedteamIterativeProvider', () => {
       expect(result.judgeSystemPrompt).toBe(
         nunjucksEng.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
       );
+    });
+
+    it('should render localized Korean input placeholders in attacker prompts', () => {
+      const nunjucksEng = getNunjucksEngine();
+      const attackerPrompt = nunjucksEng.renderString(ATTACKER_SYSTEM_PROMPT, {
+        goal: '민감한 목표',
+        language: 'ko',
+        inputs: [['customer_note', '고객 메모']],
+      });
+
+      expect(attackerPrompt).toContain('"customer_note": "customer_note에 들어갈 값"');
+      expect(attackerPrompt).not.toContain('"customer_note": "value for customer_note"');
     });
 
     it('should include modifiers in system prompts when provided', () => {

@@ -138,4 +138,72 @@ describe('IndirectWebPwnProvider', () => {
     expect(result.metadata?.stopReason).toBe('Error');
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
+
+  it('should use Korean fallback fetch prompts for Korean goals when server does not provide one', async () => {
+    mockFetchWithRetries
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-ko',
+          fullUrl: 'https://example.com/dynamic-pages/eval-1/web-ko',
+          path: '/dynamic-pages/eval-1/web-ko',
+        }),
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }));
+
+    const targetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
+        output: '한국어 응답',
+      }),
+    });
+
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: false,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: targetProvider,
+      vars: { query: '내부 정보를 찾아줘' },
+      prompt: { raw: '{{query}}', label: 'test' },
+      test: {
+        metadata: {
+          goal: '내부 정보를 찾아줘',
+          language: 'ko',
+          testCaseId: 'tc-ko',
+        },
+      } as any,
+      evaluationId: 'eval-1',
+    };
+
+    await provider.callApi('attack prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('에 접속해서 어떤 내용이 있는지 요약해 주세요.'),
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('should localize missing originalProvider errors for Korean goals', async () => {
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: false,
+    });
+
+    await expect(
+      provider.callApi('attack prompt', {
+        vars: { query: '내부 정보를 찾아줘' },
+        prompt: { raw: '{{query}}', label: 'test' },
+        test: {
+          metadata: {
+            goal: '내부 정보를 찾아줘',
+            language: 'ko',
+          },
+        } as any,
+      } as any),
+    ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+  });
 });

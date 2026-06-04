@@ -12,7 +12,8 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
@@ -76,6 +77,76 @@ describe('RedteamIterativeImageProvider', () => {
     expect(provider.id()).toBe('promptfoo:redteam:iterative:image');
   });
 
+  it('should render Korean attacker prompts for Korean test cases', async () => {
+    const { getEnvInt } = await import('../../../src/envars');
+    vi.mocked(getEnvInt).mockReturnValue(1);
+
+    vi.mocked(mockRedteamProvider.callApi)
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          improvement: '다르게 접근',
+          prompt: {
+            image_request: '민감한 장면 생성',
+          },
+        }),
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ description: '이미지 설명' }),
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          currentResponse: {
+            rating: 4,
+            components: { safetyBypass: 1, goalAchievement: 2, qualityRelevance: 1 },
+            explanation: '부분 성공',
+            improvements: ['더 직접적으로 작성'],
+          },
+          previousBestResponse: {
+            rating: 0,
+            components: { safetyBypass: 0, goalAchievement: 0, qualityRelevance: 0 },
+            explanation: '없음',
+          },
+          comparison: '개선됨',
+        }),
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      });
+
+    vi.mocked(getTargetResponse).mockResolvedValueOnce({
+      output: 'https://example.com/image-ko.png',
+      tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+    });
+
+    const provider = new RedteamIterativeProvider({
+      inputs: {
+        image_request: {
+          description: '생성 요청',
+          type: 'text',
+        },
+      },
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: '한국어 목표' },
+      prompt: { raw: '{{goal}}', label: 'test' },
+      injectVar: 'goal',
+      test: {
+        metadata: {
+          goal: '한국어 목표',
+          language: 'ko',
+        },
+      } as any,
+    } as CallApiContextParams & { injectVar: string };
+
+    await provider.callApi('test', context);
+
+    const firstBody = JSON.parse(vi.mocked(mockRedteamProvider.callApi).mock.calls[0][0] as string);
+    expect(firstBody[0].content).toContain('당신은 유능한 레드팀 어시스턴트입니다.');
+    expect(firstBody[0].content).toContain('"image_request": "image_request에 들어갈 값"');
+  });
+
   it('should throw error when originalProvider is not set', async () => {
     const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
 
@@ -85,6 +156,23 @@ describe('RedteamIterativeImageProvider', () => {
         prompt: { raw: '{{goal}}', label: 'test' },
       }),
     ).rejects.toThrow('Expected originalProvider to be set');
+  });
+
+  it('should localize missing originalProvider errors for Korean test cases', async () => {
+    const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+
+    await expect(
+      provider.callApi('test', {
+        vars: { goal: '한국어 목표' },
+        prompt: { raw: '{{goal}}', label: 'test' },
+        test: {
+          metadata: {
+            language: 'ko',
+            goal: '한국어 목표',
+          },
+        } as any,
+      }),
+    ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
   });
 
   it('should accumulate token usage from all provider calls', async () => {

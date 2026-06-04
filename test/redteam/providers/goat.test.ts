@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import logger from '../../../src/logger';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { createMockProvider } from '../../factories/provider';
@@ -216,6 +217,44 @@ describe('RedteamGoatProvider', () => {
 
     const lastCallBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
     expect(lastCallBody.messages).toBeDefined();
+  });
+
+  it('should log Korean target errors for Korean test cases', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: '공격 메시지' },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider('', {}, { error: '대상 오류' });
+    const context = createMockContext(
+      targetProvider,
+      { goal: '한국어 목표' },
+      {
+        metadata: {
+          goal: '한국어 목표',
+          language: 'ko',
+        },
+      },
+    );
+
+    await provider.callApi('test prompt', context);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[GOAT] An error occurred in GOAT turn 0.  The test will continue to the next turn in the conversation.',
+      {
+        error: '[GOAT] 대상이 오류를 반환했습니다: 대상 오류',
+      },
+    );
+    errorSpy.mockRestore();
   });
 
   it('should not dereference file:// paths in remote attacker messages', async () => {

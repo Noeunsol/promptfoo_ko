@@ -10,16 +10,32 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { resolveGraderLanguage } from '../util';
 
 import type { TestCase } from '../../types/index';
 
 export const CONCURRENCY = 10;
+
+function resolveGcgLanguage(
+  testCases: TestCase[],
+  injectVar: string,
+  config: Record<string, unknown>,
+): string {
+  if (typeof config.language === 'string') {
+    return config.language;
+  }
+  const firstTestCase = testCases[0];
+  const prompt = String(firstTestCase?.vars?.[injectVar] ?? '');
+  return resolveGraderLanguage(firstTestCase, prompt, '');
+}
 
 async function generateGcgPrompts(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any> & { n?: number },
 ): Promise<TestCase[]> {
+  const language = resolveGcgLanguage(testCases, injectVar, config);
+  const isKorean = language === 'ko';
   let progressBar: SingleBar | undefined;
   try {
     const allResults: TestCase[] = [];
@@ -27,7 +43,9 @@ async function generateGcgPrompts(
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
-          format: 'GCG Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
+          format: isKorean
+            ? 'GCG 생성 {bar} {percentage}% | ETA: {eta}s | {value}/{total} 건'
+            : 'GCG Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
           gracefulExit: true,
         },
@@ -46,7 +64,12 @@ async function generateGcgPrompts(
         assertionCount: testCase.assert?.length ?? 0,
         metadataKeyCount: Object.keys(testCase.metadata ?? {}).length,
       });
-      invariant(testCase.vars, `GCG: testCase.vars is required for case ${caseNumber}`);
+      invariant(
+        testCase.vars,
+        isKorean
+          ? `GCG: ${caseNumber}번 케이스에는 testCase.vars가 필요합니다`
+          : `GCG: testCase.vars is required for case ${caseNumber}`,
+      );
 
       const payload = {
         task: 'gcg',
@@ -148,9 +171,13 @@ export async function addGcgTestCases(
   injectVar: string,
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
+  const language = resolveGcgLanguage(testCases, injectVar, config);
+  const isKorean = language === 'ko';
   if (!isLoggedIntoCloud()) {
     throw new Error(
-      'The GCG strategy requires authentication. Run `promptfoo auth login` to use this strategy.',
+      isKorean
+        ? 'GCG 전략을 사용하려면 인증이 필요합니다. `promptfoo auth login`을 실행해 로그인하세요.'
+        : 'The GCG strategy requires authentication. Run `promptfoo auth login` to use this strategy.',
     );
   }
 
@@ -160,7 +187,9 @@ export async function addGcgTestCases(
 
   const gcgTestCases = await generateGcgPrompts(testCases, injectVar, config);
   if (gcgTestCases.length === 0) {
-    logger.warn('No GCG test cases were generated');
+    logger.warn(
+      isKorean ? 'GCG 테스트 케이스가 생성되지 않았습니다' : 'No GCG test cases were generated',
+    );
   }
 
   return gcgTestCases;

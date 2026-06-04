@@ -24,11 +24,19 @@ async function generateCitations(
   try {
     const concurrency = 10;
     const allResults: TestCase[] = [];
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    const isKorean = language === 'ko';
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
-          format: 'Citation Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
+          format: isKorean
+            ? 'Citation 생성 {bar} {percentage}% | ETA: {eta}s | {value}/{total}개 케이스'
+            : 'Citation Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
           gracefulExit: true,
         },
@@ -40,7 +48,9 @@ async function generateCitations(
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
       invariant(
         testCase.vars,
-        `Citation: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+        isKorean
+          ? `Citation: testCase.vars가 필요하지만 ${JSON.stringify(testCase)}를 받았습니다`
+          : `Citation: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
       const payload = {
@@ -80,7 +90,11 @@ async function generateCitations(
 
       // Check for API error response (matching GCG pattern)
       if (data.error) {
-        logger.error(`[Citation] Error in citation generation: ${data.error}`);
+        logger.error(
+          isKorean
+            ? `[Citation] Citation 생성 중 오류: ${data.error}`
+            : `[Citation] Error in citation generation: ${data.error}`,
+        );
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
         if (progressBar) {
           progressBar.increment(1);
@@ -90,7 +104,11 @@ async function generateCitations(
 
       // Validate response structure before accessing
       if (!data.result?.citation) {
-        logger.error(`[Citation] Invalid response structure - missing citation data`);
+        logger.error(
+          isKorean
+            ? '[Citation] 잘못된 응답 구조 - citation 데이터가 없습니다'
+            : '[Citation] Invalid response structure - missing citation data',
+        );
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
         if (progressBar) {
           progressBar.increment(1);
@@ -151,7 +169,16 @@ async function generateCitations(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in remote citation generation: ${error}`);
+    logger.error(
+      testCases[0] &&
+        resolveGraderLanguage(
+          testCases[0] as { metadata?: Record<string, any> },
+          String(testCases[0]?.vars?.[injectVar] ?? ''),
+          '',
+        ) === 'ko'
+        ? `원격 Citation 생성 중 오류: ${error}`
+        : `Error in remote citation generation: ${error}`,
+    );
     return [];
   }
 }
@@ -167,7 +194,16 @@ export async function addCitationTestCases(
 
   const citationTestCases = await generateCitations(testCases, injectVar, config);
   if (citationTestCases.length === 0) {
-    logger.warn('No citation test cases were generated');
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    logger.warn(
+      language === 'ko'
+        ? '생성된 Citation 테스트 케이스가 없습니다'
+        : 'No citation test cases were generated',
+    );
   }
 
   return citationTestCases;

@@ -146,6 +146,25 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  describe('localization', () => {
+    it('should localize missing originalProvider errors for Korean test cases', async () => {
+      const provider = new RedteamIterativeProvider({ injectVar: 'test' });
+
+      await expect(
+        provider.callApi('test', {
+          vars: { test: '한국어 목표' },
+          prompt: { raw: '{{test}}', label: 'test' },
+          test: {
+            metadata: {
+              language: 'ko',
+              goal: '한국어 목표',
+            },
+          } as any,
+        } as any),
+      ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+    });
+  });
+
   describe('runRedteamConversation', () => {
     it('should complete all iterations when score reaches 10 and grader passes', async () => {
       mockRedteamProvider.callApi

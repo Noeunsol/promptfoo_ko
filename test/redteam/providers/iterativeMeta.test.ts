@@ -398,6 +398,71 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.redteamHistory).toHaveLength(0);
       expect(mockGetTargetResponse).not.toHaveBeenCalled();
     });
+
+    it('should localize fail-closed errors for Korean test cases', async () => {
+      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+        materializationHandled: true,
+        output: {
+          result: 'document: malicious content\nquestion: summarize it',
+        },
+        tokenUsage: {
+          total: 100,
+          prompt: 50,
+          completion: 50,
+        },
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: {
+            query: '한국어 테스트',
+            document: 'stale document',
+            question: 'stale question',
+          },
+          prompt: { raw: '{{document}} {{question}}', label: 'test' },
+          originalProvider: mockTargetProvider,
+          test: {
+            metadata: {
+              language: 'ko',
+              goal: '한국어 테스트',
+            },
+          } as any,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{document}} {{question}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          metadata: {
+            language: 'ko',
+            goal: '한국어 테스트',
+          },
+        } as any,
+        vars: {
+          query: '한국어 테스트',
+          document: 'stale document',
+          question: 'stale question',
+        },
+      });
+
+      expect(result.error).toBe(
+        'Iterative Meta 원격 다중 입력 생성이 잘못된 프롬프트 형식을 반환했습니다',
+      );
+    });
   });
 
   describe('perTurnLayers configuration', () => {

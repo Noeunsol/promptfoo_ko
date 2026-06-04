@@ -352,6 +352,33 @@ describe('HydraProvider', () => {
       });
     });
 
+    it('should return localized Korean fail-closed errors when no target probes execute', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: '',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: '한국어 목표' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: '한국어 목표', pluginId: 'harmful:test', language: 'ko' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.error).toBe('Hydra 에이전트가 공격 메시지를 반환하지 않았습니다');
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should handle multiple turns until max turns reached', async () => {
       let callCount = 0;
       mockAgentProvider.callApi.mockImplementation(async function () {

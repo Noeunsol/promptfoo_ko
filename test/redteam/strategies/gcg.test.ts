@@ -121,6 +121,27 @@ describe('gcg strategy', () => {
     );
   });
 
+  it('should throw a Korean authentication error for Korean inputs', async () => {
+    mockIsLoggedIntoCloud.mockReturnValue(false);
+
+    await expect(
+      addGcgTestCases(
+        [
+          {
+            vars: {
+              prompt: '한국어로 된 테스트 프롬프트',
+            },
+            metadata: {
+              language: 'ko',
+            },
+          },
+        ],
+        'prompt',
+        {},
+      ),
+    ).rejects.toThrow('GCG 전략을 사용하려면 인증이 필요합니다.');
+  });
+
   it('should throw error when remote generation is disabled', async () => {
     mockNeverGenerateRemote.mockReturnValue(true);
 

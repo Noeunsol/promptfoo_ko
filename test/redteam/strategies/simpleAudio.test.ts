@@ -109,6 +109,12 @@ describe('audio strategy', () => {
       await expect(textToAudio(text, 'en')).rejects.toThrow('Failed to generate audio');
     });
 
+    it('should throw a Korean error message when audio generation fails for Korean text', async () => {
+      mockFetchWithCache.mockRejectedValueOnce(new Error('원격 API 오류'));
+
+      await expect(textToAudio('안녕하세요', 'ko')).rejects.toThrow('오디오 생성에 실패했습니다');
+    });
+
     it('should pass language parameter to API', async () => {
       const text = 'Bonjour, monde!';
       await textToAudio(text, 'fr');

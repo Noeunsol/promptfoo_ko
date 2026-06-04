@@ -411,7 +411,10 @@ export class HydraProvider implements ApiProvider {
 
       if (!nextMessage) {
         logger.info('[Hydra] Missing message from agent', { turn });
-        agentFailureError = 'Hydra agent did not return an attack message';
+        agentFailureError =
+          language === 'ko'
+            ? 'Hydra 에이전트가 공격 메시지를 반환하지 않았습니다'
+            : 'Hydra agent did not return an attack message';
         continue;
       }
 
@@ -441,7 +444,10 @@ export class HydraProvider implements ApiProvider {
           turn,
           messagePreview: processedMessage.slice(0, 200),
         });
-        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+        agentFailureError =
+          language === 'ko'
+            ? 'Hydra 원격 다중 입력 생성이 잘못된 프롬프트 형식을 반환했습니다'
+            : 'Hydra remote multi-input generation returned an invalid prompt format';
         continue;
       }
       if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
@@ -975,7 +981,10 @@ export class HydraProvider implements ApiProvider {
     const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
     const failClosedError =
       targetProbeCount === 0
-        ? agentFailureError || 'Hydra did not execute any target probes'
+        ? agentFailureError ||
+          (language === 'ko'
+            ? 'Hydra가 어떤 대상 프로브도 실행하지 않았습니다'
+            : 'Hydra did not execute any target probes')
         : undefined;
 
     return {

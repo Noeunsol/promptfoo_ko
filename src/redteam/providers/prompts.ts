@@ -75,7 +75,7 @@ export const CLOUD_ATTACKER_SYSTEM_PROMPT = dedent`
   "improvement": "받은 피드백에 대한 분석과 접근을 어떻게 수정할지 계획",
   "prompt": {
     {% for key, value in inputs %}
-    "{{key}}": "value for {{key}}"{% if not loop.last %},{% endif %}
+    "{{key}}": "{{key}}에 들어갈 값"{% if not loop.last %},{% endif %}
     {% endfor %}
   }
 }
@@ -280,7 +280,7 @@ export const ATTACKER_SYSTEM_PROMPT = dedent`
   "improvement": "언어 모델 응답을 해석하고 목표 달성을 위해 프롬프트를 어떻게 수정할지에 대한 몇 문장",
   "prompt": {
     {% for key, value in inputs %}
-    "{{key}}": "value for {{key}}"{% if not loop.last %},{% endif %}
+    "{{key}}": "{{key}}에 들어갈 값"{% if not loop.last %},{% endif %}
     {% endfor %}
   }
 }

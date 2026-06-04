@@ -147,6 +147,43 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.error).toContain('Network error');
   });
 
+  it('should return a Korean fallback error when all candidates fail for Korean inputs', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: [],
+      }),
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { input: '한국어 테스트 입력' },
+      prompt: { raw: 'test prompt', label: 'test' },
+      test: { metadata: { language: 'ko' } } as any,
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.error).toBe('모든 후보 프롬프트가 실패했습니다.');
+  });
+
+  it('should localize missing originalProvider errors for Korean inputs', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+
+    await expect(
+      provider.callApi('test prompt', {
+        vars: { input: '한국어 테스트 입력' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: { metadata: { language: 'ko' } } as any,
+      } as any),
+    ).rejects.toThrow('originalProvider가 설정되어 있어야 합니다');
+  });
+
   it.each([
     42,
     true,

@@ -336,7 +336,11 @@ export default class GoatProvider implements ApiProvider {
             }
 
             if (unblockingResponse.error) {
-              logger.error(`[GOAT] Target returned an error: ${unblockingResponse.error}`);
+              logger.error(
+                language === 'ko'
+                  ? `[GOAT] 대상이 오류를 반환했습니다: ${unblockingResponse.error}`
+                  : `[GOAT] Target returned an error: ${unblockingResponse.error}`,
+              );
             }
           }
         }
@@ -661,11 +665,17 @@ export default class GoatProvider implements ApiProvider {
           break;
         }
         if (targetResponse.error) {
-          throw new Error(`[GOAT] Target returned an error: ${targetResponse.error}`);
+          throw new Error(
+            language === 'ko'
+              ? `[GOAT] 대상이 오류를 반환했습니다: ${targetResponse.error}`
+              : `[GOAT] Target returned an error: ${targetResponse.error}`,
+          );
         }
         invariant(
           targetResponse.output,
-          `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
+          language === 'ko'
+            ? `[GOAT] 대상 응답 output이 설정되어 있어야 하지만 다음 값을 받았습니다: ${safeJsonStringify(targetResponse)}`
+            : `[GOAT] Expected target response output to be set, but got: ${safeJsonStringify(targetResponse)}`,
         );
 
         const stringifiedOutput =

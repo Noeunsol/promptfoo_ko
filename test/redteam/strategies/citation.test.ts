@@ -170,6 +170,34 @@ describe('citation strategy', () => {
     );
   });
 
+  it('should localize citation errors and warnings for Korean test cases', async () => {
+    const koreanTestCases: TestCase[] = [
+      {
+        vars: {
+          prompt: '한국어 프롬프트',
+        },
+        metadata: {
+          language: 'ko',
+        },
+      },
+    ];
+
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        error: 'API 오류',
+      },
+      cached: false,
+      status: 500,
+      statusText: 'Error',
+    });
+
+    const result = await addCitationTestCases(koreanTestCases, 'prompt', {});
+
+    expect(result).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalledWith('[Citation] Citation 생성 중 오류: API 오류');
+    expect(logger.warn).toHaveBeenCalledWith('생성된 Citation 테스트 케이스가 없습니다');
+  });
+
   it('should handle test cases without assert property', async () => {
     const testCasesWithoutAssert: TestCase[] = [
       {

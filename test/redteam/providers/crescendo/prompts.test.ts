@@ -4,6 +4,7 @@ import {
   EVAL_SYSTEM_PROMPT,
   REFUSAL_SYSTEM_PROMPT,
 } from '../../../../src/redteam/providers/crescendo/prompts';
+import { getNunjucksEngine } from '../../../../src/util/templates';
 
 describe('Crescendo prompts', () => {
   describe('CRESCENDO_SYSTEM_PROMPT', () => {
@@ -34,6 +35,20 @@ describe('Crescendo prompts', () => {
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{% endif %}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('<purpose>');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('</purpose>');
+    });
+
+    it('should render localized Korean input placeholders', () => {
+      const rendered = getNunjucksEngine().renderString(CRESCENDO_SYSTEM_PROMPT, {
+        language: 'ko',
+        currentRound: 1,
+        successFlag: 0,
+        maxTurns: 3,
+        conversationObjective: '한국어 목표',
+        inputs: [['customer_note', '고객 메모']],
+      });
+
+      expect(rendered).toContain('"customer_note": "customer_note에 들어갈 값"');
+      expect(rendered).not.toContain('"customer_note": "value for customer_note"');
     });
   });
 

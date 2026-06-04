@@ -162,4 +162,32 @@ describe('likert strategy', () => {
       expect.any(Number),
     );
   });
+
+  it('should localize errors and warnings for Korean test cases', async () => {
+    const koreanTestCases: TestCase[] = [
+      {
+        vars: {
+          prompt: '테스트 프롬프트',
+        },
+        metadata: {
+          language: 'ko',
+        },
+      },
+    ];
+
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        error: 'API 오류',
+      },
+      cached: false,
+      status: 500,
+      statusText: 'Error',
+    });
+
+    const result = await addLikertTestCases(koreanTestCases, 'prompt', {});
+
+    expect(result).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalledWith('[jailbreak:likert] Likert 생성 중 오류: API 오류}');
+    expect(logger.warn).toHaveBeenCalledWith('생성된 Likert 탈옥 테스트 케이스가 없습니다');
+  });
 });

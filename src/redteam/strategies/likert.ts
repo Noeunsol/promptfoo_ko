@@ -10,6 +10,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { resolveGraderLanguage } from '../util';
 
 import type { TestCase } from '../../types/index';
 
@@ -22,12 +23,19 @@ async function generateLikertPrompts(
   try {
     const concurrency = 10;
     let allResults: TestCase[] = [];
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    const isKorean = language === 'ko';
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
         {
-          format:
-            'Likert Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
+          format: isKorean
+            ? 'Likert 탈옥 생성 {bar} {percentage}% | ETA: {eta}s | {value}/{total}개 케이스'
+            : 'Likert Jailbreak Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} cases',
           hideCursor: true,
           gracefulExit: true,
         },
@@ -40,7 +48,9 @@ async function generateLikertPrompts(
       logger.debug(`[Likert] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(
         testCase.vars,
-        `Likert: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+        isKorean
+          ? `Likert: testCase.vars가 필요하지만 ${JSON.stringify(testCase)}를 받았습니다`
+          : `Likert: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
       const payload = {
@@ -78,7 +88,11 @@ async function generateLikertPrompts(
       // The remote API could return {} or {error: "..."} without modifiedPrompts, and line 80 directly
       // accesses data.modifiedPrompts.map() which would throw if undefined.
       if (data.error || !data.modifiedPrompts) {
-        logger.error(`[jailbreak:likert] Error in Likert generation: ${data.error}}`);
+        logger.error(
+          isKorean
+            ? `[jailbreak:likert] Likert 생성 중 오류: ${data.error}}`
+            : `[jailbreak:likert] Error in Likert generation: ${data.error}}`,
+        );
         logger.debug(`[jailbreak:likert] Response: ${JSON.stringify(data)}`);
         return;
       }
@@ -121,7 +135,16 @@ async function generateLikertPrompts(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in Likert generation: ${error}`);
+    logger.error(
+      testCases[0] &&
+        resolveGraderLanguage(
+          testCases[0] as { metadata?: Record<string, any> },
+          String(testCases[0]?.vars?.[injectVar] ?? ''),
+          '',
+        ) === 'ko'
+        ? `Likert 생성 중 오류: ${error}`
+        : `Error in Likert generation: ${error}`,
+    );
     return [];
   }
 }
@@ -137,7 +160,16 @@ export async function addLikertTestCases(
 
   const likertTestCases = await generateLikertPrompts(testCases, injectVar, config);
   if (likertTestCases.length === 0) {
-    logger.warn('No Likert jailbreak test cases were generated');
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    logger.warn(
+      language === 'ko'
+        ? '생성된 Likert 탈옥 테스트 케이스가 없습니다'
+        : 'No Likert jailbreak test cases were generated',
+    );
   }
 
   return likertTestCases;

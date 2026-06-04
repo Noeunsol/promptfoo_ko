@@ -183,13 +183,20 @@ async function generateMultilingual(
     const allResults: TestCase[] = [];
     let processedChunks = 0;
     let timeoutCount = 0;
+    const language = resolveGraderLanguage(
+      testCases[0] as { metadata?: Record<string, any> } | undefined,
+      String(testCases[0]?.vars?.[injectVar] ?? ''),
+      '',
+    );
+    const isKorean = language === 'ko';
 
     let progressBar: SingleBar | undefined;
     if (shouldShowProgressBar()) {
       progressBar = new SingleBar(
         {
-          format:
-            'Remote Multilingual Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} chunks',
+          format: isKorean
+            ? '원격 다국어 생성 {bar} {percentage}% | ETA: {eta}s | {value}/{total}개 청크'
+            : 'Remote Multilingual Generation {bar} {percentage}% | ETA: {eta}s | {value}/{total} chunks',
           hideCursor: true,
           gracefulExit: true,
         },
@@ -293,7 +300,11 @@ async function generateMultilingual(
       if (progressBar) {
         progressBar.increment(1);
       } else {
-        logger.debug(`Processed chunk ${processedChunks} of ${chunks.length}`);
+        logger.debug(
+          isKorean
+            ? `${chunks.length}개 청크 중 ${processedChunks}개 처리`
+            : `Processed chunk ${processedChunks} of ${chunks.length}`,
+        );
       }
     });
 
@@ -306,7 +317,9 @@ async function generateMultilingual(
       const timeoutRate = ((timeoutCount / chunks.length) * 100).toFixed(0);
       if (timeoutCount >= 3 || Number(timeoutRate) > 20) {
         logger.debug(
-          `${timeoutCount}/${chunks.length} chunks timed out (${timeoutRate}%). Consider reducing remoteChunkSize (${chunkSize}) or maxConcurrency (${maxConcurrency}).`,
+          isKorean
+            ? `${chunks.length}개 청크 중 ${timeoutCount}개가 시간 초과되었습니다(${timeoutRate}%). remoteChunkSize(${chunkSize}) 또는 maxConcurrency(${maxConcurrency})를 줄이는 것을 고려하세요.`
+            : `${timeoutCount}/${chunks.length} chunks timed out (${timeoutRate}%). Consider reducing remoteChunkSize (${chunkSize}) or maxConcurrency (${maxConcurrency}).`,
         );
       }
     }
@@ -329,7 +342,16 @@ async function generateMultilingual(
 
     return deduplicatedResults;
   } catch (error) {
-    logger.debug(`Remote multilingual generation failed: ${error}`);
+    logger.debug(
+      testCases[0] &&
+        resolveGraderLanguage(
+          testCases[0] as { metadata?: Record<string, any> },
+          String(testCases[0]?.vars?.[injectVar] ?? ''),
+          '',
+        ) === 'ko'
+        ? `원격 다국어 생성에 실패했습니다: ${error}`
+        : `Remote multilingual generation failed: ${error}`,
+    );
     return [];
   }
 }
@@ -555,9 +577,14 @@ export async function addMultilingual(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  const firstPrompt = String(testCases[0]?.vars?.[injectVar] ?? '');
+  const sourceLanguage = resolveGraderLanguage(testCases[0], firstPrompt, '');
+  const isKorean = sourceLanguage === 'ko';
   // Deprecation warning - this strategy will be removed in a future version
   logger.debug(
-    '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+    isKorean
+      ? '[DEPRECATED] "multilingual" 전략은 deprecated되었습니다. 대신 최상위 "language" 설정을 사용하세요. 참고: https://www.promptfoo.dev/docs/red-team/configuration/#language'
+      : '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
   );
 
   // Check if tests were already generated with language modifiers
@@ -568,7 +595,9 @@ export async function addMultilingual(
     // Tests already generated in multiple languages at plugin level
     // Just return them - no translation needed
     logger.debug(
-      `Multilingual strategy: ${testCases.length} tests already generated with language support`,
+      isKorean
+        ? `Multilingual 전략: ${testCases.length}개 테스트가 이미 언어 지원과 함께 생성되었습니다`
+        : `Multilingual strategy: ${testCases.length} tests already generated with language support`,
     );
     return testCases;
   }
@@ -580,7 +609,11 @@ export async function addMultilingual(
     if (multilingualTestCases.length > 0) {
       return multilingualTestCases;
     }
-    logger.debug(`Remote multilingual generation returned 0 results, falling back to local`);
+    logger.debug(
+      isKorean
+        ? '원격 다국어 생성 결과가 0건이어서 로컬 처리로 전환합니다'
+        : 'Remote multilingual generation returned 0 results, falling back to local',
+    );
   }
 
   const languages =
@@ -589,7 +622,9 @@ export async function addMultilingual(
       : DEFAULT_LANGUAGES;
   invariant(
     Array.isArray(languages),
-    'multilingual strategy: `languages` must be an array of strings',
+    isKorean
+      ? 'multilingual 전략: `languages`는 문자열 배열이어야 합니다'
+      : 'multilingual strategy: `languages` must be an array of strings',
   );
 
   const translatedTestCases: TestCase[] = [];
@@ -600,7 +635,9 @@ export async function addMultilingual(
   if (shouldShowProgressBar()) {
     progressBar = new SingleBar(
       {
-        format: 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
+        format: isKorean
+          ? '다국어 테스트 생성 중 {bar} {percentage}% | ETA: {eta}s | {value}/{total}'
+          : 'Generating Multilingual {bar} {percentage}% | ETA: {eta}s | {value}/{total}',
         hideCursor: true,
         gracefulExit: true,
       },
@@ -612,7 +649,9 @@ export async function addMultilingual(
   const processTestCase = async (testCase: TestCase): Promise<TestCase[]> => {
     invariant(
       testCase.vars,
-      `Multilingual: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
+      isKorean
+        ? `Multilingual: testCase.vars가 필요하지만 ${JSON.stringify(testCase)}를 받았습니다`
+        : `Multilingual: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
     );
     const originalText = String(testCase.vars[injectVar]);
     const sourceLanguage = resolveGraderLanguage(
@@ -662,11 +701,19 @@ export async function addMultilingual(
           if (progressBar) {
             progressBar.increment(1);
           } else {
-            logger.debug(`Translated test case: ${results.length} translations generated`);
+            logger.debug(
+              isKorean
+                ? `테스트 케이스 번역 완료: ${results.length}개 번역 생성`
+                : `Translated test case: ${results.length} translations generated`,
+            );
           }
           return results;
         } catch (error) {
-          logger.debug(`Error processing test case: ${error}`);
+          logger.debug(
+            isKorean
+              ? `테스트 케이스 처리 중 오류: ${error}`
+              : `Error processing test case: ${error}`,
+          );
           return [];
         }
       },
@@ -675,7 +722,9 @@ export async function addMultilingual(
     // Flatten all results into a single array
     translatedTestCases.push(...allResults.flat());
   } catch (error) {
-    logger.debug(`Error in multilingual translation: ${error}`);
+    logger.debug(
+      isKorean ? `다국어 번역 중 오류: ${error}` : `Error in multilingual translation: ${error}`,
+    );
   }
 
   if (progressBar) {
@@ -683,7 +732,9 @@ export async function addMultilingual(
   }
 
   logger.debug(
-    `Multilingual strategy: ${translatedTestCases.length} test cases generated from ${testCases.length} inputs`,
+    isKorean
+      ? `Multilingual 전략: ${testCases.length}개 입력에서 ${translatedTestCases.length}개 테스트 케이스를 생성했습니다`
+      : `Multilingual strategy: ${translatedTestCases.length} test cases generated from ${testCases.length} inputs`,
   );
 
   return translatedTestCases;

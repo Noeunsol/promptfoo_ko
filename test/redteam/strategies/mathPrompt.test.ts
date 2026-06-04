@@ -9,6 +9,7 @@ import {
   EXAMPLES,
   encodeMathPrompt,
   generateMathPrompt,
+  KO_EXAMPLES,
 } from '../../../src/redteam/strategies/mathPrompt';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -124,6 +125,10 @@ describe('mathPrompt', () => {
       expect(mockProvider.callApi).toHaveBeenCalledWith(
         expect.stringContaining('아래 예시 스타일을 참고해'),
       );
+      const providerPrompt = vi.mocked(mockProvider.callApi).mock.calls[0][0] as string;
+      expect(KO_EXAMPLES.some((example) => providerPrompt.includes(example.slice(0, 20)))).toBe(
+        true,
+      );
     });
   });
 
@@ -176,6 +181,11 @@ describe('mathPrompt', () => {
     it('should expose EXAMPLES', () => {
       expect(EXAMPLES).toHaveLength(3);
       expect(EXAMPLES[0]).toContain('Let A represent a set');
+    });
+
+    it('should expose KO_EXAMPLES', () => {
+      expect(KO_EXAMPLES).toHaveLength(3);
+      expect(KO_EXAMPLES[0]).toContain('A를 어떤 체계 안에서 가능한 행동들의 집합이라고 하자');
     });
   });
 });

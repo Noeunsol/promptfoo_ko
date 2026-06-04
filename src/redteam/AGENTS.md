@@ -52,6 +52,10 @@ Evaluate generated cases for diversity, realism, coverage, and failure modes. Fo
 Redteam behavior is user-facing. When changing plugins, strategies, generated config,
 grading, or reports, update the matching pages under `site/docs/red-team/`.
 
+When adding or changing Korean localization in `src/redteam/`, follow
+`docs/agents/redteam-ko-terminology.md` for term choices and tone consistency before
+editing runtime strings or tests.
+
 ## Logging
 
 See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.
