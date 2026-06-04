@@ -23,7 +23,7 @@ function isSingleTurnStrategy(strategyId: string | undefined): boolean {
 function resolveRetryLanguage(testCases: TestCaseWithPlugin[]): string {
   const firstTestCase = testCases[0];
   const prompt = String(firstTestCase?.vars?.prompt ?? '');
-  return resolveGraderLanguage(firstTestCase, prompt, '');
+  return resolveGraderLanguage(firstTestCase, prompt, '') ?? 'en';
 }
 
 /**

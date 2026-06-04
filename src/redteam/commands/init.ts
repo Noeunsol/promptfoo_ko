@@ -582,7 +582,7 @@ async function promptTargetMetadata(
     message: template.targetNameMessage,
   });
 
-  const redTeamChoice = await select({
+  const redTeamChoice = await select<RedteamChoice>({
     message: template.appTypeMessage,
     choices: [
       { name: template.appTypeChoices.notSure, value: 'not_sure' },
@@ -768,7 +768,7 @@ async function selectPlugins(
   });
 
   recordOnboardingStep('choose plugins', {
-    value: selectedPlugins.map((p) => (typeof p === 'string' ? p : p.id)),
+    value: selectedPlugins,
   });
 
   return selectedPlugins;

@@ -228,7 +228,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const goal =
       (context?.test?.metadata?.goal as string) ||
       (typeof injectVarValue === 'string' ? injectVarValue : undefined);
-    const language = resolveGraderLanguage(context?.test, String(goal ?? prompt ?? ''), '');
+    const language = resolveGraderLanguage(context?.test, String(goal ?? prompt ?? ''), '') ?? 'en';
     invariant(
       context?.originalProvider,
       language === 'ko'

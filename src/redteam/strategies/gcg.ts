@@ -26,7 +26,7 @@ function resolveGcgLanguage(
   }
   const firstTestCase = testCases[0];
   const prompt = String(firstTestCase?.vars?.[injectVar] ?? '');
-  return resolveGraderLanguage(firstTestCase, prompt, '');
+  return resolveGraderLanguage(firstTestCase, prompt, '') ?? 'en';
 }
 
 async function generateGcgPrompts(

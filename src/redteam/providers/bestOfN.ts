@@ -40,7 +40,7 @@ function resolveBestOfNLanguage(
   injectVar: string,
 ): string {
   const prompt = String(context?.vars?.[injectVar] ?? '');
-  return resolveGraderLanguage(context?.test, prompt, '');
+  return resolveGraderLanguage(context?.test, prompt, '') ?? 'en';
 }
 
 export default class BestOfNProvider implements ApiProvider {
