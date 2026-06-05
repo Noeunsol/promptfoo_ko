@@ -37,10 +37,19 @@ vi.mock('../../../src/envars', async () => {
   };
 });
 
-vi.mock('../../../src/redteam/remoteGeneration', async () => ({
-  ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-}));
+// On this branch remote generation is hardcoded off in the source module. entities.ts
+// calls shouldGenerateRemote(), which internally uses the module-local
+// neverGenerateRemote(), so we must override the exported shouldGenerateRemote directly
+// and drive it from the env var the tests set.
+vi.mock('../../../src/redteam/remoteGeneration', async () => {
+  const { getEnvBool } =
+    await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
+  return {
+    ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+    shouldGenerateRemote: vi.fn(() => !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION')),
+  };
+});
 
 describe('Entities Extractor', () => {
   let provider: MockApiProvider;
