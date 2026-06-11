@@ -50,6 +50,12 @@ type EnvVars = {
   PROMPTFOO_DISABLE_VAR_EXPANSION?: boolean;
   PROMPTFOO_DISABLE_WAL_MODE?: boolean;
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
+  /**
+   * Opt-in master switch for remote generation on the remote-off branch.
+   * When unset/false, remote generation stays disabled (local-only) regardless of
+   * the DISABLE_* flags. When true, behavior falls back to the DISABLE_* flags below.
+   */
+  PROMPTFOO_ENABLE_REMOTE_GENERATION?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;

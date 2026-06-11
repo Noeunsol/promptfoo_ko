@@ -28,9 +28,10 @@ vi.mock('../../src/cliState', () => ({
 }));
 
 describe('shouldGenerateRemote', () => {
-  // remote-off branch: neverGenerateRemote() is hardcoded to true, so
-  // shouldGenerateRemote() must always return false regardless of cloud login,
-  // env vars, local credentials, or cliState.remote.
+  // remote-off branch: PROMPTFOO_ENABLE_REMOTE_GENERATION is opt-in and unset here
+  // (getEnvBool mocked false), so neverGenerateRemote() stays true and
+  // shouldGenerateRemote() must return false regardless of cloud login, env vars,
+  // local credentials, or cliState.remote.
   beforeEach(() => {
     vi.resetAllMocks();
     cliState.remote = undefined;
@@ -124,28 +125,73 @@ describe('remote generation error helpers', () => {
   });
 });
 
+// remote-off branch: remote generation is opt-in via
+// PROMPTFOO_ENABLE_REMOTE_GENERATION. Build a getEnvBool stub from a flag map.
+function mockEnvFlags(flags: Partial<Record<string, boolean>>) {
+  vi.mocked(getEnvBool).mockImplementation((key: string) => flags[key] ?? false);
+}
+
 describe('neverGenerateRemote', () => {
-  // remote-off branch: hardcoded to always disable remote generation.
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should always return true regardless of env flags', () => {
-    vi.mocked(getEnvBool).mockReturnValue(false);
+  it('stays disabled by default when the opt-in switch is unset', () => {
+    mockEnvFlags({});
+    expect(neverGenerateRemote()).toBe(true);
+  });
+
+  it('enables remote generation when the opt-in switch is set', () => {
+    mockEnvFlags({ PROMPTFOO_ENABLE_REMOTE_GENERATION: true });
+    expect(neverGenerateRemote()).toBe(false);
+  });
+
+  it('honors the general disable flag once enabled', () => {
+    mockEnvFlags({
+      PROMPTFOO_ENABLE_REMOTE_GENERATION: true,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: true,
+    });
+    expect(neverGenerateRemote()).toBe(true);
+  });
+
+  it('honors the redteam-specific disable flag once enabled', () => {
+    mockEnvFlags({
+      PROMPTFOO_ENABLE_REMOTE_GENERATION: true,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: true,
+    });
     expect(neverGenerateRemote()).toBe(true);
   });
 });
 
 describe('neverGenerateRemoteForRegularEvals', () => {
-  // remote-off branch: hardcoded to always disable remote generation,
-  // including non-redteam features such as SimulatedUser.
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should always return true regardless of env flags', () => {
-    vi.mocked(getEnvBool).mockReturnValue(false);
+  it('stays disabled by default when the opt-in switch is unset', () => {
+    mockEnvFlags({});
     expect(neverGenerateRemoteForRegularEvals()).toBe(true);
+  });
+
+  it('enables remote generation when the opt-in switch is set', () => {
+    mockEnvFlags({ PROMPTFOO_ENABLE_REMOTE_GENERATION: true });
+    expect(neverGenerateRemoteForRegularEvals()).toBe(false);
+  });
+
+  it('honors the general disable flag once enabled', () => {
+    mockEnvFlags({
+      PROMPTFOO_ENABLE_REMOTE_GENERATION: true,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: true,
+    });
+    expect(neverGenerateRemoteForRegularEvals()).toBe(true);
+  });
+
+  it('ignores the redteam-specific disable flag for regular evals', () => {
+    mockEnvFlags({
+      PROMPTFOO_ENABLE_REMOTE_GENERATION: true,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: true,
+    });
+    expect(neverGenerateRemoteForRegularEvals()).toBe(false);
   });
 });
 

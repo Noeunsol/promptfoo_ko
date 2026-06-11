@@ -35,9 +35,19 @@ export function getRemoteGenerationUrl(): string {
  * @returns true if remote generation is disabled
  */
 export function neverGenerateRemote(): boolean {
-  // remote-off branch: remote generation is permanently disabled (local-only).
-  // To restore env-based behavior, revert this function body.
-  return true;
+  // remote-off branch: remote generation is disabled (local-only) by default.
+  // Opt in with PROMPTFOO_ENABLE_REMOTE_GENERATION=true to flip it back on without
+  // editing code or rebuilding.
+  if (!getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION')) {
+    return true;
+  }
+  // Once enabled, honor the standard disable flags.
+  // Check the general disable flag first (superset).
+  if (getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION')) {
+    return true;
+  }
+  // Fall back to the redteam-specific flag (subset).
+  return getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
 }
 
 /**
@@ -47,10 +57,14 @@ export function neverGenerateRemote(): boolean {
  * @returns true if ALL remote generation is disabled
  */
 export function neverGenerateRemoteForRegularEvals(): boolean {
-  // remote-off branch: remote generation is permanently disabled (local-only),
+  // remote-off branch: remote generation is disabled (local-only) by default,
   // including non-redteam features such as SimulatedUser.
-  // To restore env-based behavior, revert this function body.
-  return true;
+  // Opt in with PROMPTFOO_ENABLE_REMOTE_GENERATION=true to flip it back on.
+  if (!getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION')) {
+    return true;
+  }
+  // Once enabled, only the general disable flag applies to non-redteam features.
+  return getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION');
 }
 
 /**
