@@ -27,9 +27,12 @@ import {
   DEFAULT_STRATEGIES,
   HARM_PLUGINS,
   type Plugin,
+  STRATEGIES_REQUIRING_REMOTE_SET,
   type Strategy,
   subCategoryDescriptions,
+  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '../constants';
+import { neverGenerateRemote } from '../remoteGeneration';
 import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
@@ -92,7 +95,13 @@ interface RedteamInitTemplate {
   defaultPurpose: string;
   noDescriptionLabel: string;
   defaultLanguage: string;
+  remoteGenerationDisabledWarning(selectionKind: 'plugins' | 'strategies'): string;
+  remoteGenerationRequiredLabel(selectionKind: 'plugin' | 'strategy'): string;
 }
+
+const REMOTE_DISABLED_PLUGIN_SET: ReadonlySet<Plugin> = new Set(
+  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE as readonly Plugin[],
+);
 
 const REDTEAM_INIT_TEMPLATES: Record<RedteamInitLocale, RedteamInitTemplate> = {
   en: {
@@ -180,6 +189,14 @@ const REDTEAM_INIT_TEMPLATES: Record<RedteamInitLocale, RedteamInitTemplate> = {
       'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.',
     noDescriptionLabel: 'No description',
     defaultLanguage: 'en',
+    remoteGenerationDisabledWarning(selectionKind) {
+      return selectionKind === 'plugins'
+        ? `${chalk.yellow('Warning:')} Remote generation is disabled. Plugins that require remote generation are unavailable in this CLI selection.`
+        : `${chalk.yellow('Warning:')} Remote generation is disabled. Strategies that require remote generation are unavailable in this CLI selection.`;
+    },
+    remoteGenerationRequiredLabel() {
+      return 'Requires remote generation';
+    },
   },
   ko: {
     title: '레드팀 설정\n',
@@ -263,6 +280,14 @@ const REDTEAM_INIT_TEMPLATES: Record<RedteamInitLocale, RedteamInitTemplate> = {
       '유럽 저예산 여행 상담 애플리케이션입니다. 사용자는 익명이며 시스템 내부 정보나 다른 사용자 정보에는 접근할 수 없어야 합니다.',
     noDescriptionLabel: '설명 없음',
     defaultLanguage: 'ko',
+    remoteGenerationDisabledWarning(selectionKind) {
+      return selectionKind === 'plugins'
+        ? `${chalk.yellow('경고:')} Remote generation이 비활성화되어 있어 해당 기능이 필요한 플러그인은 CLI 선택 목록에서 사용할 수 없습니다.`
+        : `${chalk.yellow('경고:')} Remote generation이 비활성화되어 있어 해당 기능이 필요한 전략은 CLI 선택 목록에서 사용할 수 없습니다.`;
+    },
+    remoteGenerationRequiredLabel() {
+      return 'Remote generation 필요';
+    },
   },
 };
 
@@ -733,10 +758,31 @@ function getDefaultPluginsForChoice(
   return Array.from(DEFAULT_PLUGINS);
 }
 
+function filterPluginsForRemoteAvailability(
+  plugins: readonly Plugin[],
+  remoteDisabled: boolean,
+): Plugin[] {
+  if (!remoteDisabled) {
+    return [...plugins];
+  }
+  return plugins.filter((plugin) => !REMOTE_DISABLED_PLUGIN_SET.has(plugin));
+}
+
+function filterStrategiesForRemoteAvailability(
+  strategies: readonly Strategy[],
+  remoteDisabled: boolean,
+): Strategy[] {
+  if (!remoteDisabled) {
+    return [...strategies];
+  }
+  return strategies.filter((strategy) => !STRATEGIES_REQUIRING_REMOTE_SET.has(strategy));
+}
+
 async function selectPlugins(
   template: RedteamInitTemplate,
   redTeamChoice: RedteamChoice,
 ): Promise<(Plugin | RedteamPluginObject)[]> {
+  const remoteDisabled = neverGenerateRemote();
   const pluginConfigChoice = await select({
     message: template.pluginConfigMessage,
     choices: [
@@ -748,7 +794,16 @@ async function selectPlugins(
   recordOnboardingStep('choose plugin config method', { value: pluginConfigChoice });
 
   if (pluginConfigChoice === 'default') {
-    return getDefaultPluginsForChoice(redTeamChoice);
+    const defaultPlugins = getDefaultPluginsForChoice(redTeamChoice) as Plugin[];
+    const filteredDefaults = filterPluginsForRemoteAvailability(defaultPlugins, remoteDisabled);
+    if (remoteDisabled && filteredDefaults.length !== defaultPlugins.length) {
+      logger.warn(template.remoteGenerationDisabledWarning('plugins'));
+    }
+    return filteredDefaults;
+  }
+
+  if (remoteDisabled) {
+    logger.warn(template.remoteGenerationDisabledWarning('plugins'));
   }
 
   const pluginChoices = Array.from(ALL_PLUGINS)
@@ -757,6 +812,10 @@ async function selectPlugins(
       name: `${plugin} - ${subCategoryDescriptions[plugin] || template.noDescriptionLabel}`,
       value: plugin,
       checked: DEFAULT_PLUGINS.has(plugin),
+      disabled:
+        remoteDisabled && REMOTE_DISABLED_PLUGIN_SET.has(plugin)
+          ? template.remoteGenerationRequiredLabel('plugin')
+          : false,
     }));
 
   const selectedPlugins = await checkbox({
@@ -919,6 +978,7 @@ async function applyPluginConfigurations(
 }
 
 async function selectStrategies(template: RedteamInitTemplate): Promise<Strategy[]> {
+  const remoteDisabled = neverGenerateRemote();
   const strategyConfigChoice = await select({
     message: template.strategyConfigMessage,
     choices: [
@@ -930,7 +990,18 @@ async function selectStrategies(template: RedteamInitTemplate): Promise<Strategy
   recordOnboardingStep('choose strategy config method', { value: strategyConfigChoice });
 
   if (strategyConfigChoice === 'default') {
-    return Array.from(DEFAULT_STRATEGIES);
+    const filteredDefaults = filterStrategiesForRemoteAvailability(
+      DEFAULT_STRATEGIES,
+      remoteDisabled,
+    );
+    if (remoteDisabled && filteredDefaults.length !== DEFAULT_STRATEGIES.length) {
+      logger.warn(template.remoteGenerationDisabledWarning('strategies'));
+    }
+    return filteredDefaults;
+  }
+
+  if (remoteDisabled) {
+    logger.warn(template.remoteGenerationDisabledWarning('strategies'));
   }
 
   const strategyChoices = [
@@ -943,6 +1014,10 @@ async function selectStrategies(template: RedteamInitTemplate): Promise<Strategy
           name: `${strategy} - ${subCategoryDescriptions[strategy] || template.noDescriptionLabel}`,
           value: strategy,
           checked: DEFAULT_STRATEGIES.includes(strategy as any),
+          disabled:
+            remoteDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategy)
+              ? template.remoteGenerationRequiredLabel('strategy')
+              : false,
         }
       : strategy,
   );

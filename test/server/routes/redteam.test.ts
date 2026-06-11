@@ -591,6 +591,45 @@ describe('Redteam Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
+
+    it('should allow local-compatible run requests when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            redteam: {
+              plugins: [{ id: 'sql-injection' }],
+              strategies: [{ id: 'basic' }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBeDefined();
+      expect(mockedDoRedteamRun).toHaveBeenCalled();
+    });
+
+    it('should reject run requests with remote-required selections when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            redteam: {
+              plugins: [{ id: 'harmful:hate' }],
+              strategies: [{ id: 'basic' }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Requires remote generation be enabled');
+      expect(response.body.error).toContain('plugins: harmful:hate');
+      expect(mockedDoRedteamRun).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST /redteam/:taskId', () => {

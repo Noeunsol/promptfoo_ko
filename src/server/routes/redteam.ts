@@ -8,6 +8,8 @@ import {
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   REDTEAM_MODEL,
+  STRATEGIES_REQUIRING_REMOTE_SET,
+  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -29,6 +31,61 @@ import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
+
+const REMOTE_DISABLED_PLUGIN_SET = new Set<string>(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE);
+
+function getRemoteRequirementError(config: unknown): string | null {
+  if (typeof config !== 'object' || config === null || !('redteam' in config)) {
+    return null;
+  }
+
+  const redteam = (config as { redteam?: { plugins?: unknown[]; strategies?: unknown[] } }).redteam;
+  const plugins = Array.isArray(redteam?.plugins) ? redteam.plugins : [];
+  const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
+
+  const remotePlugins = plugins
+    .map((plugin) =>
+      typeof plugin === 'string'
+        ? plugin
+        : typeof plugin === 'object' && plugin !== null && 'id' in plugin
+          ? String((plugin as { id: unknown }).id)
+          : null,
+    )
+    .filter((pluginId): pluginId is string => Boolean(pluginId))
+    .filter((pluginId) => REMOTE_DISABLED_PLUGIN_SET.has(pluginId));
+
+  const remoteStrategies = strategies
+    .map((strategy) => {
+      if (typeof strategy === 'string') {
+        return { id: strategy, enabled: true };
+      }
+      if (typeof strategy === 'object' && strategy !== null && 'id' in strategy) {
+        const config =
+          'config' in strategy
+            ? (strategy as { config?: { enabled?: boolean } }).config
+            : undefined;
+        return {
+          id: String((strategy as { id: unknown }).id),
+          enabled: config?.enabled !== false,
+        };
+      }
+      return null;
+    })
+    .filter((strategy): strategy is { id: string; enabled: boolean } => Boolean(strategy))
+    .filter((strategy) => strategy.enabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategy.id))
+    .map((strategy) => strategy.id);
+
+  if (remotePlugins.length === 0 && remoteStrategies.length === 0) {
+    return null;
+  }
+
+  const parts = [
+    ...(remotePlugins.length > 0 ? [`plugins: ${remotePlugins.join(', ')}`] : []),
+    ...(remoteStrategies.length > 0 ? [`strategies: ${remoteStrategies.join(', ')}`] : []),
+  ];
+
+  return `Requires remote generation be enabled for ${parts.join('; ')}.`;
+}
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -248,6 +305,14 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  if (neverGenerateRemote()) {
+    const remoteRequirementError = getRemoteRequirementError(config);
+    if (remoteRequirementError) {
+      res.status(400).json({ error: remoteRequirementError });
+      return;
+    }
+  }
+
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
