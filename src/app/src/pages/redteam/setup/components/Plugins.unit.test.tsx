@@ -2,6 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -101,6 +102,7 @@ vi.mock('react-error-boundary', () => ({
 
 const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
+const mockUseApiHealth = useApiHealth as unknown as Mock;
 
 const renderWithProviders = (ui: React.ReactNode) => {
   return render(
@@ -121,6 +123,11 @@ describe('Plugins - State Management Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRecordEvent.mockClear();
+    mockUseApiHealth.mockReturnValue({
+      data: { status: 'connected', message: null },
+      refetch: vi.fn(),
+      isLoading: false,
+    });
     mockUseRedTeamConfig.mockReturnValue({
       config: {
         plugins: [],
@@ -438,6 +445,40 @@ describe('Plugins - State Management Unit Tests', () => {
         const hasIntent = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'intent');
         expect(hasIntent).toBe(true);
       });
+    });
+
+    it('should exclude remote-only plugins from preset selection when remote generation is disabled', async () => {
+      const user = userEvent.setup();
+
+      mockUseApiHealth.mockReturnValue({
+        data: { status: 'disabled', message: 'remote generation disabled' },
+        refetch: vi.fn(),
+        isLoading: false,
+      });
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [],
+        },
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      await user.click(screen.getByText('Minimal Test'));
+
+      await waitFor(() => {
+        expect(mockUpdatePlugins).toHaveBeenCalled();
+      });
+
+      const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
+      const pluginIds = lastCall[0].map((plugin: any) =>
+        typeof plugin === 'string' ? plugin : plugin.id,
+      );
+
+      expect(pluginIds).not.toContain('harmful:hate');
+      expect(pluginIds).not.toContain('harmful:self-harm');
+      expect(pluginIds).toHaveLength(0);
     });
   });
 

@@ -13,6 +13,10 @@ import {
   MULTI_MODAL_STRATEGIES_SET,
 } from '@promptfoo/redteam/constants';
 import { Lock, Settings } from 'lucide-react';
+import {
+  getRemoteGenerationRequiredMessage,
+  REMOTE_GENERATION_REQUIRED_LABEL,
+} from '../../utils/remoteGeneration';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
@@ -125,14 +129,10 @@ export function StrategyItem({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
-                    Remote generation required
+                    {REMOTE_GENERATION_REQUIRED_LABEL}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  This strategy requires remote generation. Unset
-                  PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
-                  to enable.
-                </TooltipContent>
+                <TooltipContent>{getRemoteGenerationRequiredMessage('strategy')}</TooltipContent>
               </Tooltip>
             )}
             {isDisabled && isAuthGated && (

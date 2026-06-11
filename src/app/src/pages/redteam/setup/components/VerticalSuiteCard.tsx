@@ -16,6 +16,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { ChevronDown, HelpCircle, Lock, Settings } from 'lucide-react';
 import { requiresPluginConfig } from '../constants';
+import { getRemoteGenerationRequiredMessage } from '../utils/remoteGeneration';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -410,7 +411,7 @@ export default function VerticalSuiteCard({
                                 isLocked
                                   ? 'This feature requires Promptfoo Enterprise'
                                   : pluginDisabled
-                                    ? 'This plugin requires remote generation'
+                                    ? getRemoteGenerationRequiredMessage('plugin')
                                     : apiHealthStatus === 'connected'
                                       ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
                                       : 'Promptfoo Cloud connection is required for test generation'
