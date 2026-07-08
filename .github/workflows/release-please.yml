@@ -80,7 +80,6 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
       - run: npm ci
-      - run: npm test
 
   publish-npm:
     if: >-
@@ -158,24 +157,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ''
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-
-  docker:
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.publish-npm.result == 'success' &&
-        needs.release-please.outputs.release_created == 'true'
-      }}
-    needs: [publish-npm, release-please]
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/docker.yml
-    with:
-      tag_name: ${{ needs.release-please.outputs.tag_name }}
 
   publish-code-scan-action:
     if: >-

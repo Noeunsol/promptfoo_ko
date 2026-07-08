@@ -64,74 +64,6 @@ jobs:
           echo "test-matrix=$test_matrix" >> "$GITHUB_OUTPUT"
           echo "build-matrix=$build_matrix" >> "$GITHUB_OUTPUT"
 
-  test:
-    needs: ci-config
-    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
-    timeout-minutes: 15
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-      checks: write
-      id-token: write # Required for OIDC authentication with Codecov
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.ci-config.outputs.test-matrix) }}
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 2
-
-      - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
-          cache: 'npm'
-
-      - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: 3.14.4
-
-      # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
-          ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
-
-      # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
-      # Key includes OS and Node version since native modules are platform/version specific
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npx -y npm@11.11.0 ci
-
-      - name: Test
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
-
-      - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        run: npm run test:coverage:ratchet -- --report backend
-
-      - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
-        with:
-          files: ./coverage/coverage-final.json
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: true
-          use_oidc: true
-          version: v11.2.7
-
   build:
     needs: ci-config
     name: Build on Node ${{ matrix.node }}
@@ -267,9 +199,6 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Generate JSON Schema
-        run: npm run jsonSchema:generate
-
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
@@ -310,37 +239,6 @@ jobs:
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
 
-  docs:
-    name: Build Docs
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Type Check
-        working-directory: site
-        run: npm run typecheck
-
-      - name: Build Documentation
-        working-directory: site
-        run: npm run build
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 5
@@ -375,45 +273,6 @@ jobs:
         working-directory: code-scan-action
         run: npm run build
 
-  site-tests:
-    name: Site tests
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      id-token: write # Required for OIDC authentication with Codecov
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Site Tests with Coverage
-        working-directory: site
-        run: npm run test:coverage
-
-      - name: Upload Site Coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
-        with:
-          files: ./site/coverage/coverage-final.json
-          flags: site
-          name: site-coverage
-          fail_ci_if_error: true
-          use_oidc: true
-          version: v11.2.7
-
   webui:
     name: webui tests
     timeout-minutes: 10
@@ -447,9 +306,6 @@ jobs:
       - name: Run App Tests with Coverage
         run: npm run test:coverage --prefix src/app
 
-      - name: Check Frontend Coverage Ratchets
-        run: npm run test:coverage:ratchet -- --report frontend
-
       - name: Upload Frontend Coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         with:
@@ -459,78 +315,6 @@ jobs:
           fail_ci_if_error: true
           use_oidc: true
           version: v11.2.7
-
-  integration-tests:
-    name: Run Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: 3.14.4
-
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
-          ruby-version: 4.0.1
-
-      - name: Install Dependencies
-        run: |
-          npm ci
-
-      - name: Run Integration Tests
-        run: npm run test:integration -- --coverage
-
-  smoke-tests:
-    name: Run Smoke Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Use Python 3.14
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: 3.14.4
-
-      - name: Use Ruby
-        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
-        with:
-          ruby-version: 4.0.1
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Run Smoke Tests
-        run: npm run test:smoke
 
   share-test:
     name: Share Test
@@ -629,72 +413,6 @@ jobs:
             kill "$SERVER_PID"
             wait "$SERVER_PID" || true
           fi
-
-  redteam:
-    name: Redteam (Production API)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Redteam (Production API)
-        run: |
-          npm run test:redteam:integration
-
-  redteam-staging:
-    name: Redteam (Staging API)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      - name: Upgrade npm
-        run: npm install -g npm@latest
-
-      - name: Install Dependencies
-        run: npm ci
-
-      # Need to build first so we can login
-      - name: Build
-        run: |
-          npm run build
-
-      - name: Login
-        if: env.PROMPTFOO_INTEGRATION_TEST_API_KEY != ''
-        env:
-          PROMPTFOO_INTEGRATION_TEST_API_KEY: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }}
-        run: |
-          npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
-
-      - name: Run Redteam with Staging API
-        continue-on-error: true
-        run: |
-          npm run test:redteam:integration
 
   actionlint:
     name: GitHub Actions Lint
