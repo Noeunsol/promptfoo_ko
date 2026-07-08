@@ -611,7 +611,34 @@ describe('Redteam Routes', () => {
       expect(mockedDoRedteamRun).toHaveBeenCalled();
     });
 
-    it('should reject run requests with remote-required selections when remote generation is disabled', async () => {
+    it('should strip remote-only selections and run the local subset when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+      mockedDoRedteamRun.mockResolvedValue(undefined as any);
+
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({
+          config: {
+            redteam: {
+              plugins: [{ id: 'sql-injection' }, { id: 'harmful:hate' }],
+              strategies: [{ id: 'basic' }, { id: 'goat' }],
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBeDefined();
+      expect(mockedDoRedteamRun).toHaveBeenCalled();
+
+      const runArgs = mockedDoRedteamRun.mock.calls[0][0];
+      const runConfig = runArgs.liveRedteamConfig as {
+        redteam: { plugins: { id: string }[]; strategies: { id: string }[] };
+      };
+      expect(runConfig.redteam.plugins).toEqual([{ id: 'sql-injection' }]);
+      expect(runConfig.redteam.strategies).toEqual([{ id: 'basic' }]);
+    });
+
+    it('should reject the run when every selected plugin requires remote generation', async () => {
       mockedNeverGenerateRemote.mockReturnValue(true);
 
       const response = await request(app)
@@ -626,8 +653,7 @@ describe('Redteam Routes', () => {
         });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('Requires remote generation be enabled');
-      expect(response.body.error).toContain('plugins: harmful:hate');
+      expect(response.body.error).toContain('All selected plugins require remote generation');
       expect(mockedDoRedteamRun).not.toHaveBeenCalled();
     });
   });

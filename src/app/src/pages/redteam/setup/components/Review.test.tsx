@@ -622,7 +622,7 @@ Application Details:
       expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
     });
 
-    it('should disable the Run Now button when API status is blocked for remote-required config', () => {
+    it('should keep the Run Now button enabled when API status is blocked for remote-required config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
@@ -642,10 +642,10 @@ Application Details:
       );
 
       const runButton = screen.getByRole('button', { name: /run now/i });
-      expect(runButton).toBeDisabled();
+      expect(runButton).toBeEnabled();
     });
 
-    it('should disable the Run Now button when API status is disabled for remote-required config', () => {
+    it('should keep the Run Now button enabled when API status is disabled for remote-required config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
@@ -665,10 +665,10 @@ Application Details:
       );
 
       const runButton = screen.getByRole('button', { name: /run now/i });
-      expect(runButton).toBeDisabled();
+      expect(runButton).toBeEnabled();
     });
 
-    it('should disable the Run Now button when API status is unknown for remote-required config', () => {
+    it('should keep the Run Now button enabled when API status is unknown for remote-required config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
@@ -688,7 +688,7 @@ Application Details:
       );
 
       const runButton = screen.getByRole('button', { name: /run now/i });
-      expect(runButton).toBeDisabled();
+      expect(runButton).toBeEnabled();
     });
 
     it('should enable the Run Now button when API status is loading', () => {
@@ -710,58 +710,7 @@ Application Details:
       expect(runButton).toBeEnabled();
     });
 
-    it('should show tooltip message when hovering over disabled button due to blocked API for remote-required config', async () => {
-      vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'blocked', message: null },
-        refetch: vi.fn(),
-        isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
-      mockUseRedTeamConfig.mockReturnValue({
-        config: remoteRequiredConfig,
-        updateConfig: mockUpdateConfig,
-      });
-
-      renderWithProviders(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      const button = screen.getByRole('button', { name: /run now/i });
-      hoverElement(button);
-
-      const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(/plugin "harmful:hate".*require remote generation/i);
-    });
-
-    it('should display warning alert when API is blocked for remote-required config', () => {
-      vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'blocked', message: null },
-        refetch: vi.fn(),
-        isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
-      mockUseRedTeamConfig.mockReturnValue({
-        config: remoteRequiredConfig,
-        updateConfig: mockUpdateConfig,
-      });
-
-      renderWithProviders(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Check for the specific alert text
-      expect(
-        screen.getByText(/The current configuration includes plugin "harmful:hate"/i),
-      ).toBeInTheDocument();
-    });
-
-    it('should display warning alert when API is disabled for remote-required config', () => {
+    it('should display a skip notice alert when API is disabled for remote-required config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
@@ -780,13 +729,35 @@ Application Details:
         />,
       );
 
-      // Check for the specific alert text
       expect(
-        screen.getByText(/Remove plugin "harmful:hate" to enable "Run Now"/i),
+        screen.getByText(/plugin "harmful:hate" will be skipped this run/i),
       ).toBeInTheDocument();
+      expect(screen.getByText(/PROMPTFOO_ENABLE_REMOTE_GENERATION=true/i)).toBeInTheDocument();
     });
 
-    it('should display warning alert when API is unknown for remote-required config', () => {
+    it('should not display a skip notice alert when API is blocked for remote-required config', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      mockUseRedTeamConfig.mockReturnValue({
+        config: remoteRequiredConfig,
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
+    });
+
+    it('should not display a skip notice alert when API is unknown for remote-required config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
@@ -805,13 +776,10 @@ Application Details:
         />,
       );
 
-      // Check for the specific alert text
-      expect(
-        screen.getByText(/Checking connection status for remote-required plugins and strategies/i),
-      ).toBeInTheDocument();
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
     });
 
-    it('should not display warning alert when API is connected', () => {
+    it('should not display a skip notice alert when API is connected', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
@@ -826,13 +794,10 @@ Application Details:
         />,
       );
 
-      // Check that no API health warning alert exists (but other alerts may exist)
-      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Checking connection status/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
     });
 
-    it('should not display warning alert when API is disabled for local-compatible config', () => {
+    it('should not display a skip notice alert when API is disabled for local-compatible config', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
@@ -847,11 +812,10 @@ Application Details:
         />,
       );
 
-      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
     });
 
-    it('should not display warning alert when API is loading', () => {
+    it('should not display a skip notice alert when API is loading', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'loading', message: null },
         refetch: vi.fn(),
@@ -866,13 +830,10 @@ Application Details:
         />,
       );
 
-      // Check that no API health warning alert exists (but other alerts may exist)
-      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Checking connection status/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
     });
 
-    it('should show tooltip message when hovering over disabled button due to disabled API for remote-required config', async () => {
+    it('should show a skip-notice tooltip when hovering over Run Now for disabled API + remote-required config', async () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
@@ -895,10 +856,10 @@ Application Details:
       hoverElement(button);
 
       const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(/plugin "harmful:hate".*require remote generation/i);
+      expect(tooltip).toHaveTextContent(/plugin "harmful:hate" will be skipped/i);
     });
 
-    it('should show tooltip message when hovering over disabled button due to unknown API status for remote-required config', async () => {
+    it('should not show a tooltip when API is unknown for remote-required config', async () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
@@ -920,8 +881,7 @@ Application Details:
       const button = screen.getByRole('button', { name: /run now/i });
       hoverElement(button);
 
-      const tooltip = screen.getByRole('tooltip');
-      expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should not show tooltip when API is connected', async () => {
@@ -1256,8 +1216,8 @@ Application Details:
         />,
       );
 
-      // Button should now be disabled
-      expect(screen.getByRole('button', { name: /run now/i })).toBeDisabled();
+      // Button stays enabled — Run Now no longer depends on remote status
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
 
       // Change API status back to connected
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1316,10 +1276,8 @@ Application Details:
         />,
       );
 
-      // Alert should now be visible
-      expect(
-        screen.getByText(/The current configuration includes plugin "harmful:hate"/i),
-      ).toBeInTheDocument();
+      // Blocked status no longer surfaces a skip notice (only 'disabled' does)
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
 
       // Change API status to disabled
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1336,12 +1294,10 @@ Application Details:
         />,
       );
 
-      // Alert should update its message
+      // Disabled status surfaces the skip notice
       expect(
-        screen.getByText(/Remove plugin "harmful:hate" to enable "Run Now"/i),
+        screen.getByText(/plugin "harmful:hate" will be skipped this run/i),
       ).toBeInTheDocument();
-      // Previous message should be gone
-      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
 
       // Change API status back to connected
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1359,8 +1315,7 @@ Application Details:
       );
 
       // Alert should disappear
-      expect(screen.queryByText(/Remote generation is disabled/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/Cannot connect to Promptfoo Cloud/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/will be skipped this run/i)).not.toBeInTheDocument();
     });
 
     it('should update tooltip message when API health status changes', async () => {
@@ -1385,10 +1340,9 @@ Application Details:
 
       const button = screen.getByRole('button', { name: /run now/i });
 
+      // Blocked status: no tooltip (Run Now is enabled, remote isn't the gate)
       await user.hover(button);
-      expect(screen.getByRole('tooltip')).toHaveTextContent(
-        /plugin "harmful:hate".*require remote generation/i,
-      );
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
       // Change to disabled state and rerender
       vi.mocked(useApiHealth).mockReturnValue({
@@ -1405,9 +1359,10 @@ Application Details:
         />,
       );
 
+      // Disabled status: skip-notice tooltip
       await user.hover(screen.getByRole('button', { name: /run now/i }));
       expect(screen.getByRole('tooltip')).toHaveTextContent(
-        /plugin "harmful:hate".*require remote generation/i,
+        /plugin "harmful:hate" will be skipped/i,
       );
 
       // Change to unknown state and rerender
@@ -1425,10 +1380,9 @@ Application Details:
         />,
       );
 
+      // Unknown status: no tooltip
       await user.hover(screen.getByRole('button', { name: /run now/i }));
-      expect(screen.getByRole('tooltip')).toHaveTextContent(
-        /checking connection to promptfoo cloud for remote-required plugins and strategies/i,
-      );
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
   });
 

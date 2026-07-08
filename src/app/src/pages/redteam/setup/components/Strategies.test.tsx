@@ -353,7 +353,7 @@ describe('Strategies', () => {
 
       const bestOfNCard = screen.getByText('Best-of-N').closest('[class*="cursor-not-allowed"]');
       expect(bestOfNCard).toBeInTheDocument();
-      expect(within(bestOfNCard!).getByRole('checkbox')).toBeDisabled();
+      expect(within(bestOfNCard as HTMLElement).getByRole('checkbox')).toBeDisabled();
 
       await user.click(bestOfNCard!);
 

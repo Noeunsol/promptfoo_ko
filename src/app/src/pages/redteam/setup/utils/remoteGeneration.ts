@@ -4,7 +4,7 @@ export const REMOTE_GENERATION_DISABLED_TITLE = 'Remote Generation Disabled';
 export const REMOTE_GENERATION_REQUIRED_LABEL = 'Remote generation required';
 
 const REMOTE_GENERATION_ENABLE_INSTRUCTION =
-  'Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.';
+  'Set PROMPTFOO_ENABLE_REMOTE_GENERATION=true to enable.';
 
 export function isRemoteGenerationDisabledStatus(status: ApiHealthStatus): boolean {
   return status === 'disabled';
@@ -22,8 +22,8 @@ export function getRemoteGenerationDisabledBannerDescription(
   kind: 'plugins' | 'strategies',
 ): string {
   if (kind === 'plugins') {
-    return `Some plugins require remote generation and are currently unavailable. These plugins include harmful content tests, bias tests, and other advanced security checks. To enable them, ${REMOTE_GENERATION_ENABLE_INSTRUCTION.toLowerCase()}`;
+    return `Some plugins require remote generation and are currently unavailable. These plugins include harmful content tests, bias tests, and other advanced security checks. ${REMOTE_GENERATION_ENABLE_INSTRUCTION}`;
   }
 
-  return `Some strategies require remote generation and are currently unavailable. These strategies include GOAT, GCG, audio, and other advanced attack techniques. To enable them, ${REMOTE_GENERATION_ENABLE_INSTRUCTION.toLowerCase()}`;
+  return `Some strategies require remote generation and are currently unavailable. These strategies include GOAT, GCG, audio, and other advanced attack techniques. ${REMOTE_GENERATION_ENABLE_INSTRUCTION}`;
 }

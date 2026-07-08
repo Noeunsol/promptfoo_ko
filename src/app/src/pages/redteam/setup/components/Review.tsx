@@ -462,30 +462,22 @@ export default function Review({
     return [...pluginLabels, ...strategyLabels].join(', ');
   }, [remoteRequiredPluginIds, remoteRequiredStrategyIds]);
 
-  const isRunNowDisabled = useMemo(() => {
-    return isRunning || (runNowRequiresRemote && apiHealthStatus !== 'connected');
-  }, [apiHealthStatus, isRunning, runNowRequiresRemote]);
+  // Run Now stays available regardless of remote status. Remote-only plugins/strategies
+  // are stripped server-side before the run (see filterRemoteOnlyFromConfig), so the run
+  // proceeds with the locally-runnable subset instead of being blocked.
+  const isRunNowDisabled = isRunning;
+
+  // Non-blocking notice: when remote is off but the config still contains remote-only
+  // items, tell the user they will be skipped for this run.
+  const remoteItemsWillBeSkipped =
+    runNowRequiresRemote && apiHealthStatus === 'disabled' && !isCheckingApiHealth;
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
-    if (isRunning) {
+    if (isRunning || !remoteItemsWillBeSkipped) {
       return undefined;
     }
-
-    if (!runNowRequiresRemote) {
-      return undefined;
-    }
-
-    switch (apiHealthStatus) {
-      case 'blocked':
-        return `Cannot connect to Promptfoo Cloud. ${remoteRequirementSummary} require remote generation.`;
-      case 'disabled':
-        return `Remote generation is disabled. ${remoteRequirementSummary} require remote generation.`;
-      case 'unknown':
-        return 'Checking connection to Promptfoo Cloud for remote-required plugins and strategies...';
-      default:
-        return undefined;
-    }
-  }, [apiHealthStatus, isRunning, remoteRequirementSummary, runNowRequiresRemote]);
+    return `Remote generation is disabled — ${remoteRequirementSummary} will be skipped for this run.`;
+  }, [isRunning, remoteItemsWillBeSkipped, remoteRequirementSummary]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -1237,15 +1229,11 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </p>
-            {runNowRequiresRemote && apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
+            {remoteItemsWillBeSkipped && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
                   <AlertDescription>
-                    {apiHealthStatus === 'blocked'
-                      ? `Cannot connect to Promptfoo Cloud. The current configuration includes ${remoteRequirementSummary}, which require remote generation.`
-                      : apiHealthStatus === 'disabled'
-                        ? `Remote generation is disabled. Remove ${remoteRequirementSummary} to enable "Run Now", or re-enable remote generation.`
-                        : 'Checking connection status for remote-required plugins and strategies...'}
+                    {`Remote generation is disabled. "Run Now" will proceed with the locally-runnable subset — ${remoteRequirementSummary} will be skipped this run. Enable them by setting PROMPTFOO_ENABLE_REMOTE_GENERATION=true.`}
                   </AlertDescription>
                 </AlertContent>
               </Alert>

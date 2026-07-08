@@ -34,57 +34,88 @@ export const redteamRouter = Router();
 
 const REMOTE_DISABLED_PLUGIN_SET = new Set<string>(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE);
 
-function getRemoteRequirementError(config: unknown): string | null {
-  if (typeof config !== 'object' || config === null || !('redteam' in config)) {
-    return null;
+function getPluginId(plugin: unknown): string | null {
+  if (typeof plugin === 'string') {
+    return plugin;
+  }
+  if (typeof plugin === 'object' && plugin !== null && 'id' in plugin) {
+    return String((plugin as { id: unknown }).id);
+  }
+  return null;
+}
+
+function isStrategyEnabled(strategy: unknown): boolean {
+  if (typeof strategy === 'object' && strategy !== null && 'config' in strategy) {
+    return (strategy as { config?: { enabled?: boolean } }).config?.enabled !== false;
+  }
+  return true;
+}
+
+/**
+ * remote-off branch: when remote generation is disabled, drop the plugins and
+ * strategies that can only be produced remotely so the Run Now flow still runs
+ * the locally-capable subset instead of being blocked or aborting mid-run.
+ * Remote-only plugins would otherwise generate 0 tests and remote strategies
+ * would throw and abort the whole run.
+ */
+function filterRemoteOnlyFromConfig(config: Record<string, unknown>): {
+  config: Record<string, unknown>;
+  skippedPlugins: string[];
+  skippedStrategies: string[];
+  remainingPluginCount: number;
+} {
+  if (!('redteam' in config)) {
+    return { config, skippedPlugins: [], skippedStrategies: [], remainingPluginCount: 0 };
   }
 
   const redteam = (config as { redteam?: { plugins?: unknown[]; strategies?: unknown[] } }).redteam;
   const plugins = Array.isArray(redteam?.plugins) ? redteam.plugins : [];
   const strategies = Array.isArray(redteam?.strategies) ? redteam.strategies : [];
 
-  const remotePlugins = plugins
-    .map((plugin) =>
-      typeof plugin === 'string'
-        ? plugin
-        : typeof plugin === 'object' && plugin !== null && 'id' in plugin
-          ? String((plugin as { id: unknown }).id)
-          : null,
-    )
-    .filter((pluginId): pluginId is string => Boolean(pluginId))
-    .filter((pluginId) => REMOTE_DISABLED_PLUGIN_SET.has(pluginId));
+  const skippedPlugins: string[] = [];
+  const keptPlugins = plugins.filter((plugin) => {
+    const id = getPluginId(plugin);
+    if (id && REMOTE_DISABLED_PLUGIN_SET.has(id)) {
+      skippedPlugins.push(id);
+      return false;
+    }
+    return true;
+  });
 
-  const remoteStrategies = strategies
-    .map((strategy) => {
-      if (typeof strategy === 'string') {
-        return { id: strategy, enabled: true };
-      }
-      if (typeof strategy === 'object' && strategy !== null && 'id' in strategy) {
-        const config =
-          'config' in strategy
-            ? (strategy as { config?: { enabled?: boolean } }).config
-            : undefined;
-        return {
-          id: String((strategy as { id: unknown }).id),
-          enabled: config?.enabled !== false,
-        };
-      }
-      return null;
-    })
-    .filter((strategy): strategy is { id: string; enabled: boolean } => Boolean(strategy))
-    .filter((strategy) => strategy.enabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategy.id))
-    .map((strategy) => strategy.id);
+  const skippedStrategies: string[] = [];
+  const keptStrategies = strategies.filter((strategy) => {
+    const id = getPluginId(strategy);
+    if (id && isStrategyEnabled(strategy) && STRATEGIES_REQUIRING_REMOTE_SET.has(id)) {
+      skippedStrategies.push(id);
+      return false;
+    }
+    return true;
+  });
 
-  if (remotePlugins.length === 0 && remoteStrategies.length === 0) {
-    return null;
+  if (skippedPlugins.length === 0 && skippedStrategies.length === 0) {
+    return {
+      config,
+      skippedPlugins,
+      skippedStrategies,
+      remainingPluginCount: plugins.length,
+    };
   }
 
-  const parts = [
-    ...(remotePlugins.length > 0 ? [`plugins: ${remotePlugins.join(', ')}`] : []),
-    ...(remoteStrategies.length > 0 ? [`strategies: ${remoteStrategies.join(', ')}`] : []),
-  ];
+  const filteredConfig: Record<string, unknown> = {
+    ...config,
+    redteam: {
+      ...redteam,
+      plugins: keptPlugins,
+      strategies: keptStrategies,
+    },
+  };
 
-  return `Requires remote generation be enabled for ${parts.join('; ')}.`;
+  return {
+    config: filteredConfig,
+    skippedPlugins,
+    skippedStrategies,
+    remainingPluginCount: keptPlugins.length,
+  };
 }
 
 /**
@@ -304,12 +335,32 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const { config: rawConfig, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  let config = rawConfig;
+  let skipNotice: string | null = null;
   if (neverGenerateRemote()) {
-    const remoteRequirementError = getRemoteRequirementError(config);
-    if (remoteRequirementError) {
-      res.status(400).json({ error: remoteRequirementError });
+    const {
+      config: filtered,
+      skippedPlugins,
+      skippedStrategies,
+      remainingPluginCount,
+    } = filterRemoteOnlyFromConfig(config);
+    if ((skippedPlugins.length > 0 || skippedStrategies.length > 0) && remainingPluginCount === 0) {
+      res.status(400).json({
+        error:
+          'All selected plugins require remote generation, which is disabled. ' +
+          'Enable it with PROMPTFOO_ENABLE_REMOTE_GENERATION=true, or add locally-runnable plugins.',
+      });
       return;
+    }
+    if (skippedPlugins.length > 0 || skippedStrategies.length > 0) {
+      config = filtered;
+      const parts = [
+        ...(skippedPlugins.length > 0 ? [`plugins: ${skippedPlugins.join(', ')}`] : []),
+        ...(skippedStrategies.length > 0 ? [`strategies: ${skippedStrategies.join(', ')}`] : []),
+      ];
+      skipNotice = `remote-off: skipped remote-only ${parts.join('; ')}. Enable with PROMPTFOO_ENABLE_REMOTE_GENERATION=true to include them.`;
+      logger.warn(`[redteam] ${skipNotice}`);
     }
   }
 
@@ -324,7 +375,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     progress: 0,
     total: 0,
     result: null,
-    logs: [],
+    logs: skipNotice ? [skipNotice] : [],
   });
 
   // Set web UI mode
