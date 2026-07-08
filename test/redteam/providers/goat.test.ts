@@ -41,17 +41,6 @@ vi.mock('../../../src/util/server', async (importOriginal) => {
   };
 });
 
-// On this branch remote generation is hardcoded off in the source module, which would
-// make RedteamGoatProvider's constructor throw "GOAT strategy requires remote grading
-// to be enabled". Mock the gate so the provider can be exercised. goat.ts calls
-// neverGenerateRemote() directly, so overriding the exported function works.
-vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    neverGenerateRemote: vi.fn().mockReturnValue(false),
-  };
-});
-
 describe('RedteamGoatProvider', () => {
   let mockFetch: Mock;
   let tempDir: string;

@@ -12,17 +12,11 @@ import {
   displayNameOverrides,
   type Plugin,
   riskCategories,
-  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
-import {
-  getRemoteGenerationDisabledBannerDescription,
-  isRemoteGenerationDisabledStatus,
-  REMOTE_GENERATION_DISABLED_TITLE,
-} from '../utils/remoteGeneration';
 import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
 import PageWrapper from './PageWrapper';
@@ -38,9 +32,6 @@ interface PluginsProps {
 }
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-const REMOTE_DISABLED_PLUGIN_SET: ReadonlySet<Plugin> = new Set(
-  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE as readonly Plugin[],
-);
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -122,18 +113,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   } = useApiHealth();
   const [recentlyUsedSnapshot] = useState<Plugin[]>(() => [...recentlyUsedPlugins]);
 
-  const isRemoteGenerationDisabled = isRemoteGenerationDisabledStatus(apiHealthStatus);
-
-  const filterSelectablePlugins = useCallback(
-    (plugins: Iterable<Plugin>) => {
-      const nextPlugins = Array.from(plugins);
-      if (!isRemoteGenerationDisabled) {
-        return nextPlugins;
-      }
-      return nextPlugins.filter((plugin) => !REMOTE_DISABLED_PLUGIN_SET.has(plugin));
-    },
-    [isRemoteGenerationDisabled],
-  );
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
   // Derive selectedPlugins from config.plugins
   const selectedPlugins = useMemo(() => {
@@ -203,9 +183,6 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
           return id !== plugin;
         });
       } else {
-        if (isRemoteGenerationDisabled && REMOTE_DISABLED_PLUGIN_SET.has(plugin)) {
-          return;
-        }
         // Add the plugin
         addPlugin(plugin); // Add to recently used
         newRegularPlugins = [...currentRegularPlugins, plugin];
@@ -215,7 +192,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       const allPlugins = [...newRegularPlugins, ...policyPlugins, ...intentPlugins];
       updatePlugins(allPlugins);
     },
-    [addPlugin, config.plugins, isRemoteGenerationDisabled, selectedPlugins, updatePlugins],
+    [config.plugins, selectedPlugins, updatePlugins, addPlugin],
   );
 
   const setSelectedPlugins = useCallback(
@@ -229,23 +206,19 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       );
 
       // Create new plugins array, preserving configs from existing plugins
-      const newPluginsArray: Config['plugins'] = filterSelectablePlugins(newSelectedPlugins).map(
-        (plugin) => {
-          const existing = config.plugins.find(
-            (p) => (typeof p === 'string' ? p : p.id) === plugin,
-          );
-          if (existing && typeof existing === 'object' && existing.config) {
-            return existing; // Preserve existing config
-          }
-          return plugin;
-        },
-      );
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
+        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
+        if (existing && typeof existing === 'object' && existing.config) {
+          return existing; // Preserve existing config
+        }
+        return plugin;
+      });
 
       // Combine all plugins and update store
       const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];
       updatePlugins(allPlugins);
     },
-    [config.plugins, filterSelectablePlugins, updatePlugins],
+    [config.plugins, updatePlugins],
   );
 
   const updatePluginConfig = useCallback(
@@ -406,9 +379,12 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
           <AlertContent>
-            <AlertTitle>{REMOTE_GENERATION_DISABLED_TITLE}</AlertTitle>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
             <AlertDescription>
-              {getRemoteGenerationDisabledBannerDescription('plugins')}
+              Some plugins require remote generation and are currently unavailable. These plugins
+              include harmful content tests, bias tests, and other advanced security checks. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
             </AlertDescription>
           </AlertContent>
         </Alert>

@@ -33,12 +33,7 @@ import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
-import {
-  REDTEAM_DEFAULTS,
-  STRATEGIES_REQUIRING_REMOTE_SET,
-  strategyDisplayNames,
-  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
-} from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
   isValidPolicyObject,
   makeDefaultPolicyName,
@@ -99,8 +94,6 @@ const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
   typeof entry === 'string' ? entry.trim() !== '' : Array.isArray(entry) && entry.length > 0;
 
 type ReviewPlugin = RedteamPlugin | { id: string; config?: PluginConfig };
-
-const REMOTE_DISABLED_PLUGIN_SET = new Set<string>(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE);
 
 // Aggregates entries across every intent plugin in the config. Each top-level
 // entry in `config.intent` is one intent test case at runtime (an inner array
@@ -427,57 +420,26 @@ export default function Review({
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
 
-  const remoteRequiredPluginIds = useMemo(() => {
-    return config.plugins
-      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
-      .filter((pluginId) => REMOTE_DISABLED_PLUGIN_SET.has(pluginId));
-  }, [config.plugins]);
-
-  const remoteRequiredStrategyIds = useMemo(() => {
-    return config.strategies
-      .flatMap((strategy) => {
-        if (typeof strategy === 'string') {
-          return [strategy];
-        }
-
-        if (strategy.config?.enabled === false) {
-          return [];
-        }
-
-        return [strategy.id];
-      })
-      .filter((strategyId) => STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId));
-  }, [config.strategies]);
-
-  const runNowRequiresRemote =
-    remoteRequiredPluginIds.length > 0 || remoteRequiredStrategyIds.length > 0;
-
-  const remoteRequirementSummary = useMemo(() => {
-    const pluginLabels = remoteRequiredPluginIds.map((pluginId) => `plugin "${pluginId}"`);
-    const strategyLabels = remoteRequiredStrategyIds.map((strategyId) => {
-      const label =
-        strategyDisplayNames[strategyId as keyof typeof strategyDisplayNames] || strategyId;
-      return `strategy "${label}"`;
-    });
-    return [...pluginLabels, ...strategyLabels].join(', ');
-  }, [remoteRequiredPluginIds, remoteRequiredStrategyIds]);
-
-  // Run Now stays available regardless of remote status. Remote-only plugins/strategies
-  // are stripped server-side before the run (see filterRemoteOnlyFromConfig), so the run
-  // proceeds with the locally-runnable subset instead of being blocked.
-  const isRunNowDisabled = isRunning;
-
-  // Non-blocking notice: when remote is off but the config still contains remote-only
-  // items, tell the user they will be skipped for this run.
-  const remoteItemsWillBeSkipped =
-    runNowRequiresRemote && apiHealthStatus === 'disabled' && !isCheckingApiHealth;
+  const isRunNowDisabled = useMemo(() => {
+    return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
+  }, [isRunning, apiHealthStatus]);
 
   const runNowTooltipMessage = useMemo((): string | undefined => {
-    if (isRunning || !remoteItemsWillBeSkipped) {
+    if (isRunning) {
       return undefined;
     }
-    return `Remote generation is disabled — ${remoteRequirementSummary} will be skipped for this run.`;
-  }, [isRunning, remoteItemsWillBeSkipped, remoteRequirementSummary]);
+
+    switch (apiHealthStatus) {
+      case 'blocked':
+        return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
+      case 'disabled':
+        return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+      case 'unknown':
+        return 'Checking connection to Promptfoo Cloud...';
+      default:
+        return undefined;
+    }
+  }, [isRunning, apiHealthStatus]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -1229,11 +1191,15 @@ export default function Review({
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </p>
-            {remoteItemsWillBeSkipped && (
+            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
                   <AlertDescription>
-                    {`Remote generation is disabled. "Run Now" will proceed with the locally-runnable subset — ${remoteRequirementSummary} will be skipped this run. Enable them by setting PROMPTFOO_ENABLE_REMOTE_GENERATION=true.`}
+                    {apiHealthStatus === 'blocked'
+                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      : apiHealthStatus === 'disabled'
+                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                        : 'Checking connection status...'}
                   </AlertDescription>
                 </AlertContent>
               </Alert>

@@ -24,25 +24,6 @@ import type { CallApiContextParams, ProviderResponse } from '../../src/types/ind
 
 vi.mock('../../src/cache');
 
-// On this branch remote generation is hardcoded off in the source module. Mock the
-// gate here so the remote/local branches of extractGoalFromPrompt stay exercised,
-// while still honoring PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION for the
-// "disabled" test case (extractGoalFromPrompt calls neverGenerateRemote() directly).
-vi.mock('../../src/redteam/remoteGeneration', async () => {
-  const actual = await vi.importActual<typeof import('../../src/redteam/remoteGeneration')>(
-    '../../src/redteam/remoteGeneration',
-  );
-  const { getEnvBool } =
-    await vi.importActual<typeof import('../../src/envars')>('../../src/envars');
-  return {
-    ...actual,
-    neverGenerateRemote: vi.fn(() => getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION')),
-    // Plain function (not a vi.fn) so the beforeEach vi.resetAllMocks() does not wipe
-    // its return value; tests assert the request URL is a non-undefined string.
-    getRemoteGenerationUrl: () => 'https://api.promptfoo.app/api/v1/task',
-  };
-});
-
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
     expect(removePrefix('Prompt: Hello world', 'Prompt')).toBe('Hello world');

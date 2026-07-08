@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 
-import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
@@ -10,7 +9,6 @@ import { Command } from 'commander';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
-import logger from '../../../src/logger';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import {
   redteamInit,
@@ -19,13 +17,11 @@ import {
   resolveRedteamInitLocale,
 } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
 
 import type { RedteamFileConfig } from '../../../src/redteam/types';
 
 vi.mock('fs/promises');
-vi.mock('@inquirer/checkbox');
 vi.mock('@inquirer/confirm');
 vi.mock('@inquirer/editor');
 vi.mock('@inquirer/input');
@@ -45,9 +41,6 @@ vi.mock('../../../src/logger', () => ({
     info: vi.fn(),
     warn: vi.fn(),
   },
-}));
-vi.mock('../../../src/redteam/remoteGeneration', () => ({
-  neverGenerateRemote: vi.fn(() => false),
 }));
 vi.mock('../../../src/redteam/commands/generate', () => ({
   doGenerateRedteam: vi.fn(),
@@ -225,11 +218,9 @@ describe('redteamInit', () => {
       .mockResolvedValueOnce('default')
       .mockResolvedValueOnce('default');
     vi.mocked(editor).mockResolvedValue('User query: {{prompt}}');
-    vi.mocked(checkbox).mockResolvedValue(['harmful:hate']);
     vi.mocked(confirm).mockResolvedValue(true);
     vi.mocked(readGlobalConfig).mockReturnValue({ hasHarmfulRedteamConsent: true } as any);
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-    vi.mocked(neverGenerateRemote).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -278,53 +269,6 @@ describe('redteamInit', () => {
       expect.objectContaining({
         message: expect.stringContaining('레드팀 테스트할 대상 이름'),
       }),
-    );
-  });
-
-  it('filters remote-required default plugins and strategies when remote generation is disabled', async () => {
-    vi.mocked(neverGenerateRemote).mockReturnValue(true);
-
-    await redteamInit(undefined);
-
-    const writtenConfig = vi.mocked(fs.writeFile).mock.calls[0][1] as string;
-
-    expect(writtenConfig).not.toContain('harmful:hate');
-    expect(writtenConfig).not.toContain('harmful:self-harm');
-    expect(writtenConfig).not.toContain('jailbreak:meta');
-    expect(writtenConfig).not.toContain('jailbreak:composite');
-    expect(writtenConfig).toContain('basic');
-    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
-      expect.stringContaining('Remote generation is disabled'),
-    );
-  });
-
-  it('marks remote-required manual CLI choices as disabled when remote generation is disabled', async () => {
-    vi.mocked(neverGenerateRemote).mockReturnValue(true);
-    vi.mocked(select).mockReset();
-    vi.mocked(select)
-      .mockResolvedValueOnce('prompt_model_chatbot')
-      .mockResolvedValueOnce('now')
-      .mockResolvedValueOnce('openai:gpt-4o-mini')
-      .mockResolvedValueOnce('manual')
-      .mockResolvedValueOnce('manual');
-
-    await redteamInit(undefined);
-
-    const pluginCheckboxCall = vi.mocked(checkbox).mock.calls[0][0] as unknown as {
-      choices: Array<{ value: string; disabled?: boolean | string }>;
-    };
-    const strategyCheckboxCall = vi.mocked(checkbox).mock.calls[1][0] as unknown as {
-      choices: Array<{ value: string; disabled?: boolean | string }>;
-    };
-
-    expect(
-      pluginCheckboxCall.choices.find((choice) => choice.value === 'harmful:hate')?.disabled,
-    ).toBe('Requires remote generation');
-    expect(
-      strategyCheckboxCall.choices.find((choice) => choice.value === 'jailbreak:meta')?.disabled,
-    ).toBe('Requires remote generation');
-    expect(strategyCheckboxCall.choices.find((choice) => choice.value === 'basic')?.disabled).toBe(
-      false,
     );
   });
 });

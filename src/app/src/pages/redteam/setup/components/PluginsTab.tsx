@@ -48,11 +48,6 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { useSearchParams } from 'react-router-dom';
 import { requiresPluginConfig } from '../constants';
-import {
-  getRemoteGenerationRequiredMessage,
-  getRemoteGenerationRequiredToastMessage,
-  REMOTE_GENERATION_REQUIRED_LABEL,
-} from '../utils/remoteGeneration';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -614,7 +609,10 @@ export default function PluginsTab({
                     data-testid={`plugin-list-item-${plugin}`}
                     onClick={() => {
                       if (pluginDisabled) {
-                        toast.showToast(getRemoteGenerationRequiredToastMessage('plugin'), 'error');
+                        toast.showToast(
+                          'This plugin requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+                          'error',
+                        );
                         return;
                       }
                       handlePluginToggle(plugin);
@@ -650,11 +648,13 @@ export default function PluginsTab({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
-                                {REMOTE_GENERATION_REQUIRED_LABEL}
+                                Remote generation required
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>
-                              {getRemoteGenerationRequiredMessage('plugin')}
+                              This plugin requires remote generation. Unset
+                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
                             </TooltipContent>
                           </Tooltip>
                         )}
@@ -676,7 +676,7 @@ export default function PluginsTab({
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
-                            ? getRemoteGenerationRequiredMessage('plugin')
+                            ? 'This plugin requires remote generation'
                             : apiHealthStatus === 'connected'
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                               : 'Promptfoo Cloud connection is required for test generation'

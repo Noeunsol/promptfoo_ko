@@ -1,10 +1,9 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,7 +24,6 @@ const renderWithProviders = (ui: React.ReactElement) => {
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
-vi.mock('@app/hooks/useApiHealth');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
@@ -63,10 +61,6 @@ describe('Strategies', () => {
 
     (useToast as any).mockReturnValue({
       showToast: mockShowToast,
-    });
-
-    (useApiHealth as any).mockReturnValue({
-      data: { status: 'connected', message: '' },
     });
   });
 
@@ -339,25 +333,6 @@ describe('Strategies', () => {
       expect(metaAgentCard).toBeInTheDocument();
       await user.click(metaAgentCard!);
       expect(mockUpdateConfig).toHaveBeenCalled();
-    });
-
-    it('shows Best-of-N as disabled when remote generation is unavailable', async () => {
-      const user = userEvent.setup();
-      (useApiHealth as any).mockReturnValue({
-        data: { status: 'disabled', message: 'remote generation and grading are disabled' },
-      });
-
-      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
-
-      await user.click(screen.getByText('Show Advanced Strategies'));
-
-      const bestOfNCard = screen.getByText('Best-of-N').closest('[class*="cursor-not-allowed"]');
-      expect(bestOfNCard).toBeInTheDocument();
-      expect(within(bestOfNCard as HTMLElement).getByRole('checkbox')).toBeDisabled();
-
-      await user.click(bestOfNCard!);
-
-      expect(mockUpdateConfig).not.toHaveBeenCalled();
     });
   });
 });

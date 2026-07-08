@@ -7,7 +7,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { cn } from '@app/lib/utils';
 import { CONFIGURABLE_STRATEGIES_SET } from '@promptfoo/redteam/constants';
 import { Settings } from 'lucide-react';
-import { getRemoteGenerationRequiredMessage } from '../../utils/remoteGeneration';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
@@ -137,7 +136,7 @@ function HeroStrategyCard({
       {/* Remote generation warning */}
       {isDisabled && isRemoteGenerationDisabled && (
         <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-          {getRemoteGenerationRequiredMessage('strategy')}
+          Requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION to enable.
         </div>
       )}
 

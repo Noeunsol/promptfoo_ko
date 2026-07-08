@@ -22,12 +22,6 @@ import {
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import {
-  getRemoteGenerationDisabledBannerDescription,
-  getRemoteGenerationRequiredToastMessage,
-  isRemoteGenerationDisabledStatus,
-  REMOTE_GENERATION_DISABLED_TITLE,
-} from '../utils/remoteGeneration';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
@@ -94,7 +88,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     recordEvent('webui_page_view', { page: 'redteam_config_strategies' });
   }, [recordEvent]);
 
-  const isRemoteGenerationDisabled = isRemoteGenerationDisabledStatus(apiHealthStatus);
+  const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
@@ -173,7 +167,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         if (STRATEGIES_ENTERPRISE_ONLY.has(strategyId)) {
           toast.showToast('This strategy is available in Promptfoo Enterprise.', 'error');
         } else {
-          toast.showToast(getRemoteGenerationRequiredToastMessage('strategy'), 'error');
+          toast.showToast(
+            'This strategy requires remote generation to be enabled. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION.',
+            'error',
+          );
         }
         return;
       }
@@ -446,9 +443,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
           <AlertContent>
-            <AlertTitle>{REMOTE_GENERATION_DISABLED_TITLE}</AlertTitle>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
             <AlertDescription>
-              {getRemoteGenerationDisabledBannerDescription('strategies')}
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
             </AlertDescription>
           </AlertContent>
         </Alert>

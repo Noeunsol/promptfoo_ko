@@ -24,18 +24,10 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
-// On this branch remote generation is hardcoded off in the source module. purpose.ts
-// calls neverGenerateRemote() directly (if (!neverGenerateRemote()) => remote path), so
-// override the exported gate and drive it from the env var the tests set.
-vi.mock('../../../src/redteam/remoteGeneration', async () => {
-  const { getEnvBool } =
-    await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
-  return {
-    ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
-    getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-    neverGenerateRemote: vi.fn(() => getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION')),
-  };
-});
+vi.mock('../../../src/redteam/remoteGeneration', async () => ({
+  ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+}));
 
 describe('System Purpose Extractor', () => {
   let provider: MockApiProvider;
