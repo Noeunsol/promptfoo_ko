@@ -17,7 +17,7 @@ promptfoo_ko는 [promptfoo](https://github.com/promptfoo/promptfoo) 기반의 **
   - 25종+ 플러그인의 **채점 사유(reason) 한국어화** 및 한국어 거부(refusal) 탐지
   - **언어 자동 탐지**(한글 비율 기반)로 채점 출력 언어 자동 분기
   - init/온보딩 템플릿 한국어 제공
-  - 용어 표준 문서 `docs/agents/redteam-ko-terminology.md` (코드 식별자·설정 키는 영어 유지, 사용자 문구만 한국어)
+  - 용어 원칙: 코드 식별자·설정 키는 영어 유지, 사용자 노출 문구만 한국어로 통일
 
 ---
 
@@ -92,7 +92,7 @@ promptfoo_ko는 [promptfoo](https://github.com/promptfoo/promptfoo) 기반의 **
 ### 4.1 파이프라인
 
 ```text
-Config (promptfooconfig.yaml / redteam.yaml)
+Config (레드팀 설정 YAML — redteam setup/init 으로 생성)
   -> Plugin (테스트 케이스 생성)
     -> Strategy (변환/우회, 선택)
       -> Target LLM (대상 호출)
@@ -115,25 +115,39 @@ npm ci
 ### 4.3 실행 방법
 
 ```bash
-# 1) 기존 설정으로 레드팀 스캔 (생성 + 평가)
-npm run local -- redteam run -c redteam.yaml --env-file .env -o output.json --no-cache
+# 0) 레드팀 설정(YAML) 만들기 — 아래 둘 중 하나로 생성
+npm run local -- redteam setup       # 브라우저 위저드로 생성 (빌드된 UI; 최신 반영은 npm run build)
+npm run local -- redteam init        # CLI 대화형으로 생성
+
+# 1) 설정으로 레드팀 스캔 (생성 + 평가)
+npm run local -- redteam run -c <config>.yaml --env-file .env -o output.json --no-cache
 
 # 2) 테스트 케이스 생성만 (redteam.yaml 출력)
-npm run local -- redteam generate -c promptfooconfig.yaml
+npm run local -- redteam generate -c <config>.yaml
 
-# 3) 웹 UI (앱 :3000 + 서버 :15500)
+# 3) 웹 UI (개발 모드: 앱 :3000 핫리로드 + 서버 :15500)
 npm run dev
 ```
 
 인자 설명:
 
-- `-c <config>`: 설정 파일 경로 (`promptfooconfig.yaml`=소스, `redteam.yaml`=생성 결과)
+- `-c <config>`: 레드팀 블록을 포함한 설정 YAML 경로 (`redteam setup`/`redteam init`으로 생성)
 - `--env-file .env`: API 키 로드
 - `-o output.json`: 결과 저장 (`success`/`score`/`error` 확인)
 - `--no-cache`: 캐시 무시(개발 시 권장)
 - 언어: 설정 `redteam.language: ko` 또는 자동 탐지
 
-> **원격 생성**: 기본 **ON**(promptfoo cloud로 생성). 끄려면 `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` (레드팀만 끄려면 `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`).
+> **웹 UI 실행 선택**: `npm run dev`는 소스 핫리로드(개발용), `redteam setup`은 **빌드된** UI를 서빙하며 설정 화면으로 바로 연다(변경 반영엔 `npm run build` 필요). 글로벌 `promptfoo`가 아니라 반드시 `npm run local -- ...`로 이 저장소 코드를 실행할 것.
+
+### 4.4 원격 생성 on/off
+
+- 기본 **ON**(promptfoo cloud로 생성).
+- 끄기: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` (레드팀만: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`). env는 프로세스 시작 시 1회 로드되므로 변경 후 서버 재시작 필요.
+- 확인: 서버 실행 중 `curl http://localhost:15500/api/remote-health` → `{"status":"OK"}`(ON) / `{"status":"DISABLED"}`(OFF). 또는 UI Plugins/Strategies에서 원격 전용 항목의 활성/회색 여부로 확인.
+
+```bash
+PROMPTFOO_DISABLE_REMOTE_GENERATION=true npm run local -- redteam run -c <config>.yaml --env-file .env   # 이번 실행만 OFF
+```
 
 ---
 
@@ -150,10 +164,10 @@ npm run dev
 ## 6. Requirements
 
 - **Node**: `^20.20.0 || >=22.22.0` (권장 `.nvmrc` = `24.15.0`)
-- **패키지 매니저**: npm (`package-lock.json`; 하위 패키지 `--prefix src/app`, `--prefix site`)
+- **패키지 매니저**: npm (`package-lock.json`; 하위 패키지 `--prefix src/app`)
 - **설치**: `npm ci` — 모든 의존성은 `package.json`에 정의
 - **주요 도구**: tsx(실행/dev), tsdown(빌드), Biome+Prettier(린트/포맷), Vitest(테스트), Drizzle(DB)
-- **핵심 명령**: `npm run build` · `npm test` · `npm run lint` · `npm run dev`
+- **핵심 명령**: `npm run build` · `npm test` · `npm run lint` · `npm run dev` · `npm run local -- redteam setup`
 - **기본 모델**: `REDTEAM_MODEL = openai:chat:gpt-4o-mini`
 - **환경변수**: `OPENAI_API_KEY`(필수), `API_PORT`(서버 포트, 기본 15500), `PROMPTFOO_DISABLE_REMOTE_GENERATION`(원격 생성 OFF 토글)
 
@@ -180,12 +194,7 @@ promptfoo_ko/
 │   ├── server/                     # 백엔드 서버 (:15500)
 │   ├── providers/  assertions/  commands/  matchers/  codeScan/
 │   └── main.ts
-├── docs/agents/redteam-ko-terminology.md   # 한↔영 용어 표준
-├── examples/                       # 예시 설정
-├── site/                           # 문서 사이트 (Docusaurus)
-├── test/                           # 테스트 (Vitest)
 ├── drizzle/                        # DB 마이그레이션
-├── promptfooconfig.yaml            # 소스 설정(한국어 레드팀)
-├── redteam.yaml                    # 생성된 레드팀 설정
-├── package.json  AGENTS.md  README.md
+├── src/app/  ·  code-scan-action/  ·  plugins/
+├── package.json  ·  README.md  ·  LICENSE
 ```
