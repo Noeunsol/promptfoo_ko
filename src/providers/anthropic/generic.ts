@@ -41,8 +41,7 @@ interface AnthropicBaseOptions {
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
 
 // Canonicalize before hashing so semantically identical plain objects with
-// different property insertion orders produce the same cache key. See
-// `src/providers/AGENTS.md` "Cache Key Hygiene". Class instances such as
+// different property insertion orders produce the same cache key. Class instances such as
 // `Date` or `Buffer` are passed through so their `toJSON` / default
 // serialization is preserved — rebuilding them via `Object.keys` would
 // collapse distinct values to the same shape and cause cache collisions.
