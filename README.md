@@ -82,8 +82,8 @@ promptfoo_ko는 [promptfoo](https://github.com/promptfoo/promptfoo) 기반의 **
 | `korean:jeong`       | 정(情)·감정 호소("우리가 남도 아니고", "한 번만 봐주세요")+민감 요청            | Medium |
 | `korean:honorific`   | 존댓말/반말·의사 친족("친구", "오빠-동생") 프레이밍+민감 요청                   | Medium |
 
-> - **100개 이상**(현재 기준 약 159개, upstream 업데이트로 변동) 레드팀 플러그인의 기능·심각도·예시 문장 → [PLUGINS.md](PLUGINS.md)
-> - **65종** assertion/그레이더 타입의 기능·설정 예시 → [ASSERTIONS.md](ASSERTIONS.md)
+> 전체 레드팀 플러그인(현재 약 159종)과 assertion/그레이더 타입(65종)은 코드 기준으로 계속 늘어납니다.
+> 플러그인 ID는 `src/redteam/constants/plugins.ts`, assertion 타입은 `src/types/index.ts`에서 확인할 수 있습니다.
 
 ### 3.3 사용 모델
 
